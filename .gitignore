@@ -1,0 +1,33 @@
+# Binaries
+/bin/
+/.exe
+
+# Environment variables
+.env
+.env.local
+.env.*
+*.env
+
+# Logs
+*.log
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Coverage
+coverage.txt
+coverage.html
+
+# Go specific
+vendor/
+*.test
+*.out
+
+.vercel

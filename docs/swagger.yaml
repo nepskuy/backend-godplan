@@ -1,0 +1,291 @@
+basePath: /api/v1
+definitions:
+  handlers.ClockInRequest:
+    properties:
+      force:
+        example: false
+        type: boolean
+      latitude:
+        example: -6.2088
+        type: number
+      longitude:
+        example: 106.8456
+        type: number
+      photo_selfie:
+        example: base64_encoded_image
+        type: string
+    type: object
+  handlers.ClockOutRequest:
+    properties:
+      force:
+        example: false
+        type: boolean
+      latitude:
+        example: -6.2088
+        type: number
+      longitude:
+        example: 106.8456
+        type: number
+      photo_selfie:
+        example: base64_encoded_image
+        type: string
+    type: object
+  handlers.ErrorResponse:
+    properties:
+      error:
+        type: string
+      success:
+        type: boolean
+    type: object
+  handlers.LocationCheckRequest:
+    properties:
+      latitude:
+        example: -6.2088
+        type: number
+      longitude:
+        example: 106.8456
+        type: number
+    type: object
+  handlers.LoginRequest:
+    properties:
+      email:
+        example: admin@godplan.com
+        type: string
+      password:
+        example: password
+        type: string
+    type: object
+  handlers.RegisterRequest:
+    properties:
+      email:
+        example: john@example.com
+        type: string
+      name:
+        example: John Doe
+        type: string
+      password:
+        example: password123
+        type: string
+      username:
+        example: johndoe
+        type: string
+    type: object
+  handlers.SuccessResponse:
+    properties:
+      data: {}
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: Attendance Management System API
+  title: GodPlan API
+  version: "1.0"
+paths:
+  /attendance:
+    get:
+      consumes:
+      - application/json
+      description: Get logged-in user's attendance history with optional filters
+      parameters:
+      - description: Filter by date (YYYY-MM-DD)
+        in: query
+        name: date
+        type: string
+      - description: 'Limit number of records (default: 30)'
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get attendance history
+      tags:
+      - attendance
+  /attendance/check-location:
+    post:
+      consumes:
+      - application/json
+      description: Validate if user location is within office range
+      parameters:
+      - description: Location coordinates
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.LocationCheckRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Check location validity
+      tags:
+      - attendance
+  /attendance/clock-in:
+    post:
+      consumes:
+      - application/json
+      description: Record user clock-in with location validation
+      parameters:
+      - description: Clock-in data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.ClockInRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handlers.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Clock in attendance
+      tags:
+      - attendance
+  /attendance/clock-out:
+    post:
+      consumes:
+      - application/json
+      description: Record user clock-out with location validation
+      parameters:
+      - description: Clock-out data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.ClockOutRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Clock out attendance
+      tags:
+      - attendance
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate user and return JWT token
+      parameters:
+      - description: Login credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: User login
+      tags:
+      - auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Create a new user account
+      parameters:
+      - description: User registration data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handlers.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Register a new user
+      tags:
+      - auth
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
