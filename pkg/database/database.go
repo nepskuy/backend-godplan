@@ -25,25 +25,21 @@ func InitDB() error {
 		return err
 	}
 
-	// Set connection pool settings
+	// Set connection pool
 	DB.SetMaxOpenConns(25)
 	DB.SetMaxIdleConns(10)
 	DB.SetConnMaxLifetime(30 * time.Minute)
 	DB.SetConnMaxIdleTime(5 * time.Minute)
 
-	// Test connection with retry mechanism
+	// Retry ping
 	maxRetries := 5
-	retryDelay := 2 * time.Second
-
 	for i := 0; i < maxRetries; i++ {
 		err = DB.Ping()
 		if err == nil {
 			break
 		}
 		log.Printf("⚠️ Database connection attempt %d/%d failed: %v", i+1, maxRetries, err)
-		if i < maxRetries-1 {
-			time.Sleep(retryDelay)
-		}
+		time.Sleep(2 * time.Second)
 	}
 
 	if err != nil {
@@ -53,7 +49,7 @@ func InitDB() error {
 
 	log.Println("✅ Database connected successfully")
 
-	// Log info connection (without sensitive info)
+	// Log connection info
 	if cfg.DatabaseURL != "" {
 		log.Println("📡 Using DATABASE_URL from environment (Vercel/Production)")
 	} else {
@@ -61,12 +57,14 @@ func InitDB() error {
 			cfg.DBUser, cfg.DBHost, cfg.DBPort, cfg.DBName, cfg.DBSSLMode, cfg.DBSSLRootCert)
 	}
 
-	// Warn if SSL cert file is missing when sslmode is verify-ca
-	if cfg.DBSSLMode == "verify-ca" && cfg.DBSSLRootCert != "" {
-		if _, err := os.Stat(cfg.DBSSLRootCert); os.IsNotExist(err) {
-			log.Printf("⚠️ SSL root certificate not found at path: %s", cfg.DBSSLRootCert)
-		} else {
-			log.Printf("🔒 SSL root certificate found at path: %s", cfg.DBSSLRootCert)
+	// Warn if SSL cert file missing
+	if cfg.DBSSLMode == "verify-ca" {
+		if os.Getenv("DB_CA_PEM") == "" && cfg.DBSSLRootCert != "" {
+			if _, err := os.Stat(cfg.DBSSLRootCert); os.IsNotExist(err) {
+				log.Printf("⚠️ SSL root certificate not found at path: %s", cfg.DBSSLRootCert)
+			} else {
+				log.Printf("🔒 SSL root certificate found at path: %s", cfg.DBSSLRootCert)
+			}
 		}
 	}
 
