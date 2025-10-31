@@ -32,9 +32,9 @@ func Load() *Config {
 		DBName:        getEnv("DB_NAME", "godplan"),
 		DBSSLMode:     getEnv("DB_SSLMODE", "disable"),
 		DBSSLRootCert: getEnv("DB_SSLROOTCERT", ""),
-		ServerPort:    getEnv("PORT", "8080"), // Vercel menggunakan PORT
+		ServerPort:    getEnv("PORT", "8080"),
 		JWTSecret:     getEnv("JWT_SECRET", "dev-secret-key-change-in-production"),
-		DatabaseURL:   os.Getenv("DATABASE_URL"), // Simpan DATABASE_URL langsung
+		DatabaseURL:   os.Getenv("DATABASE_URL"), // gunakan DATABASE_URL jika ada
 	}
 
 	log.Println("✅ Configuration loaded successfully")
@@ -43,11 +43,10 @@ func Load() *Config {
 
 // GetDBConnectionString mengembalikan connection string untuk database
 func (c *Config) GetDBConnectionString() string {
-	// PRIORITAS 1: Gunakan DATABASE_URL jika ada (untuk Vercel/Production)
+	// PRIORITAS 1: Gunakan DATABASE_URL jika ada (production)
 	if c.DatabaseURL != "" {
 		log.Println("✅ Using DATABASE_URL from environment")
 
-		// Untuk Vercel Postgres, biasanya sudah include search_path
 		// Tambahkan search_path jika belum ada
 		if !strings.Contains(c.DatabaseURL, "search_path") && !strings.Contains(c.DatabaseURL, "options") {
 			separator := "?"
@@ -60,7 +59,7 @@ func (c *Config) GetDBConnectionString() string {
 		return c.DatabaseURL
 	}
 
-	// PRIORITAS 2: Build dari individual environment variables
+	// PRIORITAS 2: Bangun dari individual env vars
 	log.Println("⚠️ DATABASE_URL not found, building from individual variables")
 	log.Printf("   DB_HOST: %s", c.DBHost)
 	log.Printf("   DB_PORT: %s", c.DBPort)

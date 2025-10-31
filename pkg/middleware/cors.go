@@ -3,26 +3,30 @@ package middleware
 import (
 	"log"
 	"net/http"
+	"os"
 )
 
+// CORS middleware
 func CORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Log every request to verify middleware is working
-		log.Printf("🌐 CORS Middleware TRIGGERED - Method: %s, Path: %s, Origin: %s",
-			r.Method, r.URL.Path, r.Header.Get("Origin"))
-
-		// Allow multiple origins
 		origin := r.Header.Get("Origin")
+
+		// Daftar allowed origins
 		allowedOrigins := []string{
-			"http://localhost:3000",
-			"http://127.0.0.1:3000",
-			"https://localhost:3000",
-			"https://fe-godplan.vercel.app",
 			"https://godplan.godjahstudio.com",
-			"http://godplan.godjahstudio.com",
+			"https://be-godplan.godjahstudio.com",
+			"https://fe-godplan.vercel.app",
 		}
 
-		// Check if origin is allowed
+		// Jika running di development, tambahkan localhost
+		if os.Getenv("ENVIRONMENT") != "production" {
+			allowedOrigins = append(allowedOrigins,
+				"http://localhost:3000",
+				"http://127.0.0.1:3000",
+				"https://localhost:3000",
+			)
+		}
+
 		allowed := false
 		for _, o := range allowedOrigins {
 			if origin == o {
@@ -32,8 +36,8 @@ func CORS(next http.Handler) http.Handler {
 			}
 		}
 
-		// If no specific origin matched, use the first one as default for development
-		if !allowed && len(allowedOrigins) > 0 {
+		// Jika origin tidak match, dan development, pakai localhost default
+		if !allowed && os.Getenv("ENVIRONMENT") != "production" && len(allowedOrigins) > 0 {
 			w.Header().Set("Access-Control-Allow-Origin", allowedOrigins[0])
 		}
 
@@ -43,14 +47,13 @@ func CORS(next http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Max-Age", "86400")
 		w.Header().Set("Access-Control-Expose-Headers", "Content-Length, Content-Type, Authorization")
 
-		// Handle preflight requests
+		// Tangani preflight OPTIONS
 		if r.Method == "OPTIONS" {
 			log.Printf("✅ CORS Preflight handled for: %s", r.URL.Path)
 			w.WriteHeader(http.StatusOK)
 			return
 		}
 
-		log.Printf("➡️ CORS passing to next handler: %s", r.URL.Path)
 		next.ServeHTTP(w, r)
 	})
 }
