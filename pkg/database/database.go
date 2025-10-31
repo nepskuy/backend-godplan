@@ -3,7 +3,6 @@ package database
 import (
 	"database/sql"
 	"log"
-	"strings"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -16,21 +15,12 @@ func InitDB() error {
 	cfg := config.Load()
 	connStr := cfg.GetDBConnectionString()
 
-	// Tambahkan search_path hanya jika belum ada di connection string
-	if !strings.Contains(connStr, "search_path=") {
-		separator := "?"
-		if strings.Contains(connStr, "?") {
-			separator = "&"
-		}
-		connStr = connStr + separator + "search_path=godplan,public"
-		log.Println("📝 Added search_path to connection string")
-	}
-
 	log.Printf("🔵 Connecting to database...")
 
 	var err error
 	DB, err = sql.Open("postgres", connStr)
 	if err != nil {
+		log.Printf("❌ Failed to open database connection: %v", err)
 		return err
 	}
 
@@ -41,7 +31,7 @@ func InitDB() error {
 	DB.SetConnMaxIdleTime(5 * time.Minute)
 
 	// Test connection dengan retry mechanism
-	maxRetries := 3
+	maxRetries := 5
 	for i := 0; i < maxRetries; i++ {
 		err = DB.Ping()
 		if err == nil {
@@ -54,10 +44,20 @@ func InitDB() error {
 	}
 
 	if err != nil {
+		log.Printf("❌ All database connection attempts failed: %v", err)
 		return err
 	}
 
 	log.Println("✅ Database connected successfully")
+
+	// Log info connection (tanpa password)
+	if cfg.DatabaseURL != "" {
+		log.Println("📡 Using DATABASE_URL (Vercel/Production)")
+	} else {
+		log.Printf("💻 Using individual DB config: %s@%s:%s/%s",
+			cfg.DBUser, cfg.DBHost, cfg.DBPort, cfg.DBName)
+	}
+
 	return nil
 }
 

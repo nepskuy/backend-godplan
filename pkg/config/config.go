@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 )
 
 type Config struct {
@@ -16,6 +17,7 @@ type Config struct {
 	DBSSLRootCert string
 	ServerPort    string
 	JWTSecret     string
+	DatabaseURL   string
 }
 
 // Load memuat konfigurasi dari environment variables
@@ -30,8 +32,9 @@ func Load() *Config {
 		DBName:        getEnv("DB_NAME", "godplan"),
 		DBSSLMode:     getEnv("DB_SSLMODE", "disable"),
 		DBSSLRootCert: getEnv("DB_SSLROOTCERT", ""),
-		ServerPort:    getEnv("SERVER_PORT", "8080"),
+		ServerPort:    getEnv("PORT", "8080"), // Vercel menggunakan PORT
 		JWTSecret:     getEnv("JWT_SECRET", "dev-secret-key-change-in-production"),
+		DatabaseURL:   os.Getenv("DATABASE_URL"), // Simpan DATABASE_URL langsung
 	}
 
 	log.Println("✅ Configuration loaded successfully")
@@ -41,9 +44,20 @@ func Load() *Config {
 // GetDBConnectionString mengembalikan connection string untuk database
 func (c *Config) GetDBConnectionString() string {
 	// PRIORITAS 1: Gunakan DATABASE_URL jika ada (untuk Vercel/Production)
-	if dbURL := os.Getenv("DATABASE_URL"); dbURL != "" {
+	if c.DatabaseURL != "" {
 		log.Println("✅ Using DATABASE_URL from environment")
-		return dbURL
+
+		// Untuk Vercel Postgres, biasanya sudah include search_path
+		// Tambahkan search_path jika belum ada
+		if !strings.Contains(c.DatabaseURL, "search_path") && !strings.Contains(c.DatabaseURL, "options") {
+			separator := "?"
+			if strings.Contains(c.DatabaseURL, "?") {
+				separator = "&"
+			}
+			return c.DatabaseURL + separator + "search_path=godplan,public"
+		}
+
+		return c.DatabaseURL
 	}
 
 	// PRIORITAS 2: Build dari individual environment variables
@@ -63,6 +77,12 @@ func (c *Config) GetDBConnectionString() string {
 	if c.DBSSLRootCert != "" {
 		connStr += fmt.Sprintf(" sslrootcert=%s", c.DBSSLRootCert)
 		log.Println("📝 Added sslrootcert to connection string")
+	}
+
+	// Tambahkan search_path untuk development
+	if !strings.Contains(connStr, "search_path") {
+		connStr += " search_path=godplan,public"
+		log.Println("📝 Added search_path to connection string")
 	}
 
 	return connStr

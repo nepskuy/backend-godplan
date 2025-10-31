@@ -19,17 +19,29 @@ import (
 func main() {
 	log.Println("🚀 Starting GodPlan Backend Server...")
 
-	if err := godotenv.Load(); err != nil {
-		log.Println("⚠️ No .env file found, using environment variables")
-	} else {
-		log.Println("✅ .env file loaded")
+	// Load .env file hanya di development
+	if config.IsDevelopment() {
+		if err := godotenv.Load(); err != nil {
+			log.Println("⚠️ No .env file found, using environment variables")
+		} else {
+			log.Println("✅ .env file loaded")
+		}
 	}
 
 	cfg := config.Load()
 
 	log.Println("🔌 Connecting to database...")
-	connStr := cfg.GetDBConnectionString()
-	log.Printf("📝 Connection string: %s", maskPassword(connStr))
+
+	// Debug info untuk DATABASE_URL
+	if cfg.DatabaseURL != "" {
+		log.Println("✅ DATABASE_URL is available")
+		maskedURL := maskPassword(cfg.DatabaseURL)
+		log.Printf("📝 Using DATABASE_URL: %s", maskedURL)
+	} else {
+		log.Println("⚠️ DATABASE_URL not found, using individual DB config")
+		log.Printf("📝 DB Host: %s, Port: %s, User: %s, Name: %s",
+			cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBName)
+	}
 
 	if err := database.InitDB(); err != nil {
 		log.Fatalf("❌ Failed to connect to database: %v", err)
@@ -50,7 +62,15 @@ func main() {
 	}
 
 	addr := fmt.Sprintf(":%s", port)
-	log.Printf("🌐 Server starting on http://localhost%s", addr)
+
+	// Log environment info
+	env := "development"
+	if config.IsProduction() {
+		env = "production"
+	}
+
+	log.Printf("🌐 Server starting in %s mode", env)
+	log.Printf("📍 Listening on http://localhost%s", addr)
 	log.Printf("📚 Swagger UI available at http://localhost%s/swagger", addr)
 	log.Printf("🏥 Health check at http://localhost%s/health", addr)
 
@@ -145,13 +165,16 @@ func healthCheck(w http.ResponseWriter, r *http.Request) {
 		platform = "vercel"
 	}
 
+	cfg := config.Load()
+
 	utils.SuccessResponse(w, http.StatusOK, "Server is healthy", map[string]interface{}{
-		"status":    "ok",
-		"service":   "godplan-backend",
-		"database":  dbStatus,
-		"timestamp": time.Now().Format(time.RFC3339),
-		"platform":  platform,
-		"version":   "1.0.0",
+		"status":       "ok",
+		"service":      "godplan-backend",
+		"database":     dbStatus,
+		"environment":  platform,
+		"timestamp":    time.Now().Format(time.RFC3339),
+		"version":      "1.0.0",
+		"using_db_url": cfg.DatabaseURL != "",
 	})
 }
 
@@ -185,7 +208,7 @@ func swaggerHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func maskPassword(connStr string) string {
-
+	// Mask password dalam connection string
 	for _, prefix := range []string{"password=", "Password="} {
 		if idx := findIndex(connStr, prefix); idx != -1 {
 			end := findNextSeparator(connStr, idx+len(prefix))
@@ -193,6 +216,7 @@ func maskPassword(connStr string) string {
 		}
 	}
 
+	// Mask password dalam URL format (postgres://user:pass@host)
 	if idx := findIndex(connStr, "://"); idx != -1 {
 		if idx2 := findIndex(connStr[idx+3:], "@"); idx2 != -1 {
 			start := idx + 3
