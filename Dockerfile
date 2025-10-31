@@ -1,4 +1,4 @@
-FROM golang:1.25.1-alpine
+FROM golang:1.25.1-alpine AS builder
 
 WORKDIR /app
 
@@ -11,13 +11,19 @@ RUN go install github.com/swaggo/swag/cmd/swag@v1.16.3
 
 COPY . .
 
-RUN swag init -g main.go -o docs
+RUN swag init -g ./cmd/main.go -o ./docs
 
 RUN go build -o app ./cmd/main.go
 
-COPY ca.pem ./
+FROM alpine:3.18
 
-COPY docs ./docs/
+WORKDIR /app
+
+RUN apk add --no-cache ca-certificates
+
+COPY --from=builder /app/app .
+COPY --from=builder /app/docs ./docs
+COPY ca.pem ./ca.pem
 
 EXPOSE 8080
 

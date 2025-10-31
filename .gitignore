@@ -1,33 +1,69 @@
-# Binaries
+# ===============================
+# Go build / binaries / cache
+# ===============================
 /bin/
-/.exe
+/*.exe
+*.out
+*.test
+vendor/
 
-# Environment variables
+# Go build cache
+*.a
+*.o
+*.so
+*.exe
+
+# ===============================
+# Environment variables / secrets
+# ===============================
 .env
-.env.local
 .env.*
 *.env
+.env.local
+.env.production
+.env.*.local
+.env.override
 
-# Logs
+# SSL / certificates
+*.pem
+*.key
+
+# ===============================
+# Logs / coverage
+# ===============================
 *.log
+coverage.txt
+coverage.html
 
-# IDE files
+# ===============================
+# IDE / editor
+# ===============================
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# OS files
+# ===============================
+# OS specific
+# ===============================
 .DS_Store
 Thumbs.db
 
-# Coverage
-coverage.txt
-coverage.html
+# ===============================
+# Docker
+# ===============================
+docker-compose.override.yml
+docker-compose.override.*.yml
+*.env.docker
 
-# Go specific
-vendor/
-*.test
-*.out
+# ===============================
+# Vercel / Deployment
+# ===============================
+.vercel/
+.now/
 
-.vercel
+# ===============================
+# Docs / Swagger (optional)
+# ===============================
+/docs/*.html
+/docs/*.json

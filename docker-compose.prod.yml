@@ -1,0 +1,20 @@
+version: "3.9"
+
+services:
+  api:
+    build: .
+    container_name: godplan-api
+    env_file:
+      - .env.production
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./ca.pem:/app/ca.pem:ro
+      - ./docs:/app/docs:ro
+    networks:
+      - godplan-network
+    restart: always
+
+networks:
+  godplan-network:
+    driver: bridge

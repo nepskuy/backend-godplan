@@ -1,0 +1,57 @@
+version: "3.9"
+
+services:
+  api:
+    build: .
+    container_name: godplan-api
+    env_file:
+      - .env.local
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+    volumes:
+      - ./ca.pem:/app/ca.pem:ro
+      - ./docs:/app/docs:ro
+    networks:
+      - godplan-network
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: godplan-db
+    environment:
+      POSTGRES_DB: godplan
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - godplan-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: godplan-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@godplan.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "8085:80"
+    networks:
+      - godplan-network
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
+
+networks:
+  godplan-network:
+    driver: bridge
