@@ -16,6 +16,11 @@ import (
 	"github.com/nepskuy/be-godplan/pkg/utils"
 )
 
+// @title GodPlan API
+// @version 1.0
+// @description Backend API for GodPlan application
+// @host localhost:8080
+// @BasePath /api/v1
 func main() {
 	log.Println("🚀 Starting GodPlan Backend Server...")
 
@@ -111,16 +116,28 @@ func setupRouter() *mux.Router {
 	router.HandleFunc("/health", healthCheck).Methods("GET", "OPTIONS")
 	router.HandleFunc("/api/v1/health", healthCheck).Methods("GET", "OPTIONS")
 
+	// Serve Swagger JSON
 	router.HandleFunc("/swagger.json", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "./docs/swagger.json")
 	}).Methods("GET")
 
+	// Serve Swagger YAML (alternatif)
+	router.HandleFunc("/swagger.yaml", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "./docs/swagger.yaml")
+	}).Methods("GET")
+
+	// Swagger UI handler
 	router.HandleFunc("/swagger", swaggerHandler).Methods("GET")
 	router.HandleFunc("/swagger/", swaggerHandler).Methods("GET")
 
+	// Root redirect to Swagger
 	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/swagger", http.StatusFound)
 	}).Methods("GET")
+
+	// Static files untuk Swagger UI assets (jika diperlukan)
+	router.PathPrefix("/swagger/static/").Handler(http.StripPrefix("/swagger/static/",
+		http.FileServer(http.Dir("./docs/"))))
 
 	publicAPI := router.PathPrefix("/api/v1").Subrouter()
 	publicAPI.HandleFunc("/auth/register", handlers.Register).Methods("POST", "OPTIONS")
@@ -185,21 +202,72 @@ func swaggerHandler(w http.ResponseWriter, r *http.Request) {
 <html>
 <head>
     <title>GodPlan API Documentation</title>
-    <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+    <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5.9.0/swagger-ui.css">
+    <link rel="icon" type="image/png" href="https://unpkg.com/swagger-ui-dist@5.9.0/favicon-32x32.png" sizes="32x32" />
+    <link rel="icon" type="image/png" href="https://unpkg.com/swagger-ui-dist@5.9.0/favicon-16x16.png" sizes="16x16" />
+    <style>
+        html {
+            box-sizing: border-box;
+            overflow: -moz-scrollbars-vertical;
+            overflow-y: scroll;
+        }
+        *,
+        *:before,
+        *:after {
+            box-sizing: inherit;
+        }
+        body {
+            margin: 0;
+            background: #fafafa;
+        }
+        .swagger-ui .topbar {
+            background-color: #2c3e50;
+            padding: 10px 0;
+        }
+    </style>
 </head>
 <body>
     <div id="swagger-ui"></div>
-    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+    <script src="https://unpkg.com/swagger-ui-dist@5.9.0/swagger-ui-bundle.js"></script>
+    <script src="https://unpkg.com/swagger-ui-dist@5.9.0/swagger-ui-standalone-preset.js"></script>
     <script>
-        SwaggerUIBundle({
-            url: '/swagger.json',
-            dom_id: '#swagger-ui',
-            presets: [
-                SwaggerUIBundle.presets.apis,
-                SwaggerUIBundle.SwaggerUIStandalonePreset
-            ],
-            layout: "StandaloneLayout"
-        });
+        window.onload = function() {
+            const ui = SwaggerUIBundle({
+                url: '/swagger.json',
+                dom_id: '#swagger-ui',
+                deepLinking: true,
+                presets: [
+                    SwaggerUIBundle.presets.apis,
+                    SwaggerUIStandalonePreset
+                ],
+                plugins: [
+                    SwaggerUIBundle.plugins.DownloadUrl
+                ],
+                layout: "StandaloneLayout",
+                validatorUrl: null,
+                defaultModelsExpandDepth: -1,
+                operationsSorter: "alpha",
+                tagsSorter: "alpha",
+                docExpansion: "none"
+            });
+            
+            // Handle jika swagger.json tidak ditemukan
+            fetch('/swagger.json')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Swagger JSON not found');
+                    }
+                    return response.json();
+                })
+                .catch(error => {
+                    document.getElementById('swagger-ui').innerHTML = 
+                        '<div style="padding: 20px; text-align: center; color: red;">' +
+                        '<h2>Error Loading Swagger Documentation</h2>' +
+                        '<p>' + error.message + '</p>' +
+                        '<p>Please check if swagger.json exists and is properly generated.</p>' +
+                        '</div>';
+                });
+        }
     </script>
 </body>
 </html>

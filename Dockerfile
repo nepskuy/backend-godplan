@@ -13,7 +13,7 @@ COPY . .
 
 RUN swag init -g ./cmd/main.go -o ./docs
 
-RUN go build -o app ./cmd/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -o app ./cmd/main.go
 
 FROM alpine:3.18
 
@@ -23,6 +23,7 @@ RUN apk add --no-cache ca-certificates
 
 COPY --from=builder /app/app .
 COPY --from=builder /app/docs ./docs
+COPY --from=builder /app/cmd ./cmd
 COPY ca.pem ./ca.pem
 
 EXPOSE 8080
