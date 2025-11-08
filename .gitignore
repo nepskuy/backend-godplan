@@ -20,6 +20,7 @@ vendor/
 .env.*
 *.env
 .env.local
+.env.prod
 .env.production
 .env.*.local
 .env.override
@@ -27,6 +28,8 @@ vendor/
 # SSL / certificates
 *.pem
 *.key
+*.crt
+ca.pem
 
 # ===============================
 # Logs / coverage
@@ -63,7 +66,20 @@ docker-compose.override.*.yml
 .now/
 
 # ===============================
-# Docs / Swagger (optional)
+# Database / migrations runtime
 # ===============================
-/docs/*.html
-/docs/*.json
+*.db
+*.sqlite
+/tmp/
+
+# ===============================
+# Go specific (additional)
+# ===============================
+/go/bin/
+/go/pkg/
+
+# ===============================
+# Backup files
+# ===============================
+*.bak
+*.backup
