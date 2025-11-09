@@ -150,22 +150,28 @@ func setupRoutes() {
 	protectedAPI.HandleFunc("/users", handlers.CreateUser).Methods("POST")
 	protectedAPI.HandleFunc("/users/{id}", handlers.GetUser).Methods("GET")
 
-	protectedAPI.HandleFunc("/tasks", handlers.GetTasks).Methods("GET")
-	protectedAPI.HandleFunc("/tasks", handlers.CreateTask).Methods("POST")
-	protectedAPI.HandleFunc("/tasks/{id}", handlers.GetTask).Methods("GET")
-	protectedAPI.HandleFunc("/tasks/{id}", handlers.UpdateTask).Methods("PUT")
-	protectedAPI.HandleFunc("/tasks/{id}", handlers.DeleteTask).Methods("DELETE")
+	// Task handlers (gunakan placeholder untuk yang belum ada)
+	protectedAPI.HandleFunc("/tasks", notImplementedHandler).Methods("GET")
+	protectedAPI.HandleFunc("/tasks", notImplementedHandler).Methods("POST")
+	protectedAPI.HandleFunc("/tasks/{id}", notImplementedHandler).Methods("GET")
+	protectedAPI.HandleFunc("/tasks/{id}", notImplementedHandler).Methods("PUT")
+	protectedAPI.HandleFunc("/tasks/{id}", notImplementedHandler).Methods("DELETE")
 
-	protectedAPI.HandleFunc("/attendance/clock-in", handlers.ClockIn).Methods("POST")
-	protectedAPI.HandleFunc("/attendance/clock-out", handlers.ClockOut).Methods("POST")
-	protectedAPI.HandleFunc("/attendance/check-location", handlers.CheckLocation).Methods("POST")
-	protectedAPI.HandleFunc("/attendance", handlers.GetAttendance).Methods("GET")
+	// Gunakan HTTP handlers untuk attendance
+	protectedAPI.HandleFunc("/attendance/clock-in", handlers.ClockInHTTP).Methods("POST")
+	protectedAPI.HandleFunc("/attendance/clock-out", handlers.ClockOutHTTP).Methods("POST")
+	protectedAPI.HandleFunc("/attendance/check-location", handlers.CheckLocationHTTP).Methods("POST")
+	protectedAPI.HandleFunc("/attendance", handlers.GetAttendanceHTTP).Methods("GET")
 
 	router.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		utils.ErrorResponse(w, http.StatusNotFound, "Route not found: "+r.URL.Path)
 	})
 
 	log.Printf("✅ GodPlan API initialized successfully for Vercel")
+}
+
+func notImplementedHandler(w http.ResponseWriter, r *http.Request) {
+	utils.ErrorResponse(w, http.StatusNotImplemented, "Handler not implemented")
 }
 
 func healthCheck(w http.ResponseWriter, r *http.Request) {

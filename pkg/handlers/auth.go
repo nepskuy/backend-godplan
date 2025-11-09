@@ -3,11 +3,12 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/nepskuy/be-godplan/pkg/config"
 	"github.com/nepskuy/be-godplan/pkg/database"
 	"github.com/nepskuy/be-godplan/pkg/utils"
 	"golang.org/x/crypto/bcrypt"
@@ -41,7 +42,9 @@ type LoginRequest struct {
 func Register(w http.ResponseWriter, r *http.Request) {
 	// Check database connection first
 	if err := database.HealthCheck(); err != nil {
-		log.Printf("❌ Database connection error in Register: %v", err)
+		if config.IsDevelopment() {
+			fmt.Printf("❌ Database connection error in Register: %v\n", err)
+		}
 		utils.ErrorResponse(w, http.StatusServiceUnavailable, "Database connection lost")
 		return
 	}
@@ -79,8 +82,10 @@ func Register(w http.ResponseWriter, r *http.Request) {
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		log.Printf("Failed to hash password: %v", err)
-		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to hash password")
+		if config.IsDevelopment() {
+			fmt.Printf("Failed to hash password: %v\n", err)
+		}
+		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to process request")
 		return
 	}
 
@@ -95,19 +100,25 @@ func Register(w http.ResponseWriter, r *http.Request) {
 	).Scan(&userID)
 
 	if err != nil {
-		log.Printf("Failed to create user: %v", err)
-		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to create user: "+err.Error())
+		if config.IsDevelopment() {
+			fmt.Printf("Failed to create user: %v\n", err)
+		}
+		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to create user")
 		return
 	}
 
 	token, err := jwtUtil.GenerateToken(userID, req.Email, "employee")
 	if err != nil {
-		log.Printf("Failed to generate token: %v", err)
-		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to generate token")
+		if config.IsDevelopment() {
+			fmt.Printf("Failed to generate token: %v\n", err)
+		}
+		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to process request")
 		return
 	}
 
-	log.Printf("User registered successfully - ID: %d, Email: %s", userID, req.Email)
+	if config.IsDevelopment() {
+		fmt.Printf("User registered successfully - ID: %d, Email: %s\n", userID, req.Email)
+	}
 
 	utils.SuccessResponse(w, http.StatusCreated, "User registered successfully", map[string]interface{}{
 		"token": token,
@@ -135,7 +146,9 @@ func Register(w http.ResponseWriter, r *http.Request) {
 func Login(w http.ResponseWriter, r *http.Request) {
 	// Check database connection first
 	if err := database.HealthCheck(); err != nil {
-		log.Printf("❌ Database connection error in Login: %v", err)
+		if config.IsDevelopment() {
+			fmt.Printf("❌ Database connection error in Login: %v\n", err)
+		}
 		utils.ErrorResponse(w, http.StatusServiceUnavailable, "Database connection lost")
 		return
 	}
@@ -161,7 +174,9 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Login attempt - Email: %s", credentials.Email)
+	if config.IsDevelopment() {
+		fmt.Printf("Login attempt - Email: %s\n", credentials.Email)
+	}
 
 	var user struct {
 		ID       int    `json:"id"`
@@ -182,30 +197,42 @@ func Login(w http.ResponseWriter, r *http.Request) {
 	).Scan(&user.ID, &user.Username, &user.Name, &user.Email, &user.Password, &user.Role)
 
 	if err != nil {
-		log.Printf("User not found or DB error: %v", err)
+		if config.IsDevelopment() {
+			fmt.Printf("User not found or DB error: %v\n", err)
+		}
 		utils.ErrorResponse(w, http.StatusUnauthorized, "Invalid credentials")
 		return
 	}
 
-	log.Printf("User found - ID: %d, Email: %s, Role: %s", user.ID, user.Email, user.Role)
+	if config.IsDevelopment() {
+		fmt.Printf("User found - ID: %d, Email: %s, Role: %s\n", user.ID, user.Email, user.Role)
+	}
 
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(credentials.Password))
 	if err != nil {
-		log.Printf("Password mismatch for user: %s", credentials.Email)
+		if config.IsDevelopment() {
+			fmt.Printf("Password mismatch for user: %s\n", credentials.Email)
+		}
 		utils.ErrorResponse(w, http.StatusUnauthorized, "Invalid credentials")
 		return
 	}
 
-	log.Printf("Password verified successfully")
+	if config.IsDevelopment() {
+		fmt.Printf("Password verified successfully\n")
+	}
 
 	token, err := jwtUtil.GenerateToken(user.ID, user.Email, user.Role)
 	if err != nil {
-		log.Printf("Token generation failed: %v", err)
-		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to generate token")
+		if config.IsDevelopment() {
+			fmt.Printf("Token generation failed: %v\n", err)
+		}
+		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to process request")
 		return
 	}
 
-	log.Printf("Login successful - User ID: %d, Role: %s", user.ID, user.Role)
+	if config.IsDevelopment() {
+		fmt.Printf("Login successful - User ID: %d, Role: %s\n", user.ID, user.Role)
+	}
 
 	utils.SuccessResponse(w, http.StatusOK, "Login successful", map[string]interface{}{
 		"token": token,

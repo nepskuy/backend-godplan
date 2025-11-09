@@ -2,12 +2,13 @@ package handlers
 
 import (
 	"database/sql"
-	"encoding/json"
-	"log"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
 
+	"github.com/gin-gonic/gin"
+	"github.com/nepskuy/be-godplan/pkg/config"
 	"github.com/nepskuy/be-godplan/pkg/database"
 	"github.com/nepskuy/be-godplan/pkg/models"
 	"github.com/nepskuy/be-godplan/pkg/utils"
@@ -32,17 +33,6 @@ type LocationCheckRequest struct {
 	Longitude float64 `json:"longitude" example:"106.8456"`
 }
 
-type SuccessResponse struct {
-	Success bool        `json:"success"`
-	Message string      `json:"message"`
-	Data    interface{} `json:"data"`
-}
-
-type ErrorResponse struct {
-	Success bool   `json:"success"`
-	Error   string `json:"error"`
-}
-
 type AttendanceResponse struct {
 	ID              int       `json:"id"`
 	UserID          int       `json:"user_id"`
@@ -64,15 +54,29 @@ type AttendanceResponse struct {
 // @Produce json
 // @Security BearerAuth
 // @Param request body LocationCheckRequest true "Location coordinates"
-// @Success 200 {object} SuccessResponse
-// @Failure 400 {object} ErrorResponse
+// @Success 200 {object} utils.GinResponse
+// @Failure 400 {object} utils.GinResponse
 // @Router /attendance/check-location [post]
-func CheckLocation(w http.ResponseWriter, r *http.Request) {
-	var req LocationCheckRequest
+func CheckLocation(c *gin.Context) {
+	if config.IsDevelopment() {
+		fmt.Println("🔵 CheckLocation started")
+	}
 
-	err := json.NewDecoder(r.Body).Decode(&req)
-	if err != nil {
-		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid request body")
+	defer func() {
+		if err := recover(); err != nil {
+			if config.IsDevelopment() {
+				fmt.Printf("🚨 CheckLocation PANIC: %v\n", err)
+			}
+			utils.GinErrorResponse(c, http.StatusInternalServerError, "Location check failed")
+		}
+	}()
+
+	var req LocationCheckRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		if config.IsDevelopment() {
+			fmt.Printf("🔴 CheckLocation bind error: %v\n", err)
+		}
+		utils.GinErrorResponse(c, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
@@ -83,7 +87,7 @@ func CheckLocation(w http.ResponseWriter, r *http.Request) {
 		Distance:  50.0,
 	}
 
-	utils.SuccessResponse(w, http.StatusOK, "Location validation successful", response)
+	utils.GinSuccessResponse(c, http.StatusOK, "Location validation successful", response)
 }
 
 // ClockIn godoc
@@ -94,64 +98,79 @@ func CheckLocation(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Security BearerAuth
 // @Param request body ClockInRequest true "Clock-in data"
-// @Success 201 {object} SuccessResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 401 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
+// @Success 201 {object} utils.GinResponse
+// @Failure 400 {object} utils.GinResponse
+// @Failure 401 {object} utils.GinResponse
+// @Failure 500 {object} utils.GinResponse
 // @Router /attendance/clock-in [post]
-func ClockIn(w http.ResponseWriter, r *http.Request) {
-	log.Println("🔵 ClockIn started")
+func ClockIn(c *gin.Context) {
+	if config.IsDevelopment() {
+		fmt.Println("🔵 ClockIn started")
+	}
 
 	defer func() {
 		if err := recover(); err != nil {
-			log.Printf("🚨 ClockIn PANIC: %v", err)
-			utils.ErrorResponse(w, http.StatusInternalServerError, "Clock in failed")
+			if config.IsDevelopment() {
+				fmt.Printf("🚨 ClockIn PANIC: %v\n", err)
+			}
+			utils.GinErrorResponse(c, http.StatusInternalServerError, "Clock in failed")
 		}
 	}()
 
 	var req ClockInRequest
-	err := json.NewDecoder(r.Body).Decode(&req)
-	if err != nil {
-		log.Printf("🔴 ClockIn decode error: %v", err)
-		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid request body")
+	if err := c.ShouldBindJSON(&req); err != nil {
+		if config.IsDevelopment() {
+			fmt.Printf("🔴 ClockIn bind error: %v\n", err)
+		}
+		utils.GinErrorResponse(c, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
-	userIDVal := r.Context().Value("userID")
-	if userIDVal == nil {
-		log.Printf("🔴 ClockIn: userID not found in context")
-		utils.ErrorResponse(w, http.StatusUnauthorized, "User not authenticated")
+	userID, exists := c.Get("userID")
+	if !exists {
+		if config.IsDevelopment() {
+			fmt.Println("🔴 ClockIn: userID not found in context")
+		}
+		utils.GinErrorResponse(c, http.StatusUnauthorized, "User not authenticated")
 		return
 	}
 
-	userID, ok := userIDVal.(int)
+	userIDInt, ok := userID.(int)
 	if !ok {
-		log.Printf("🔴 ClockIn: userID type assertion failed")
-		utils.ErrorResponse(w, http.StatusInternalServerError, "Invalid user ID")
+		if config.IsDevelopment() {
+			fmt.Println("🔴 ClockIn: userID type assertion failed")
+		}
+		utils.GinErrorResponse(c, http.StatusInternalServerError, "Invalid user ID")
 		return
 	}
 
-	log.Printf("🔵 ClockIn: userID=%d", userID)
+	if config.IsDevelopment() {
+		fmt.Printf("🔵 ClockIn: userID=%d\n", userIDInt)
+	}
 
 	inRange := true
 
 	var attendanceID int
-	err = database.DB.QueryRow(
+	err := database.DB.QueryRow(
 		"INSERT INTO attendances (user_id, type, status, latitude, longitude, photo_selfie, in_range, force_attendance, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id",
-		userID, "in", "approved", req.Latitude, req.Longitude, req.PhotoSelfie, inRange, req.Force, time.Now(),
+		userIDInt, "in", "approved", req.Latitude, req.Longitude, req.PhotoSelfie, inRange, req.Force, time.Now(),
 	).Scan(&attendanceID)
 
 	if err != nil {
-		log.Printf("🔴 ClockIn database error: %v", err)
-		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to clock in: "+err.Error())
+		if config.IsDevelopment() {
+			fmt.Printf("🔴 ClockIn database error: %v\n", err)
+		}
+		utils.GinErrorResponse(c, http.StatusInternalServerError, "Failed to clock in")
 		return
 	}
 
-	log.Printf("🔵 ClockIn successful: attendanceID=%d", attendanceID)
+	if config.IsDevelopment() {
+		fmt.Printf("🔵 ClockIn successful: attendanceID=%d\n", attendanceID)
+	}
 
 	response := AttendanceResponse{
 		ID:              attendanceID,
-		UserID:          userID,
+		UserID:          userIDInt,
 		Type:            "in",
 		Status:          "approved",
 		Latitude:        req.Latitude,
@@ -161,7 +180,7 @@ func ClockIn(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:       time.Now(),
 	}
 
-	utils.SuccessResponse(w, http.StatusCreated, "Clock in successful", response)
+	utils.GinSuccessResponse(c, http.StatusCreated, "Clock in successful", response)
 }
 
 // ClockOut godoc
@@ -172,64 +191,79 @@ func ClockIn(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Security BearerAuth
 // @Param request body ClockOutRequest true "Clock-out data"
-// @Success 200 {object} SuccessResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 401 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
+// @Success 200 {object} utils.GinResponse
+// @Failure 400 {object} utils.GinResponse
+// @Failure 401 {object} utils.GinResponse
+// @Failure 500 {object} utils.GinResponse
 // @Router /attendance/clock-out [post]
-func ClockOut(w http.ResponseWriter, r *http.Request) {
-	log.Println("🔵 ClockOut started")
+func ClockOut(c *gin.Context) {
+	if config.IsDevelopment() {
+		fmt.Println("🔵 ClockOut started")
+	}
 
 	defer func() {
 		if err := recover(); err != nil {
-			log.Printf("🚨 ClockOut PANIC: %v", err)
-			utils.ErrorResponse(w, http.StatusInternalServerError, "Clock out failed")
+			if config.IsDevelopment() {
+				fmt.Printf("🚨 ClockOut PANIC: %v\n", err)
+			}
+			utils.GinErrorResponse(c, http.StatusInternalServerError, "Clock out failed")
 		}
 	}()
 
 	var req ClockOutRequest
-	err := json.NewDecoder(r.Body).Decode(&req)
-	if err != nil {
-		log.Printf("🔴 ClockOut decode error: %v", err)
-		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid request body")
+	if err := c.ShouldBindJSON(&req); err != nil {
+		if config.IsDevelopment() {
+			fmt.Printf("🔴 ClockOut bind error: %v\n", err)
+		}
+		utils.GinErrorResponse(c, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
-	userIDVal := r.Context().Value("userID")
-	if userIDVal == nil {
-		log.Printf("🔴 ClockOut: userID not found in context")
-		utils.ErrorResponse(w, http.StatusUnauthorized, "User not authenticated")
+	userID, exists := c.Get("userID")
+	if !exists {
+		if config.IsDevelopment() {
+			fmt.Println("🔴 ClockOut: userID not found in context")
+		}
+		utils.GinErrorResponse(c, http.StatusUnauthorized, "User not authenticated")
 		return
 	}
 
-	userID, ok := userIDVal.(int)
+	userIDInt, ok := userID.(int)
 	if !ok {
-		log.Printf("🔴 ClockOut: userID type assertion failed")
-		utils.ErrorResponse(w, http.StatusInternalServerError, "Invalid user ID")
+		if config.IsDevelopment() {
+			fmt.Println("🔴 ClockOut: userID type assertion failed")
+		}
+		utils.GinErrorResponse(c, http.StatusInternalServerError, "Invalid user ID")
 		return
 	}
 
-	log.Printf("🔵 ClockOut: userID=%d", userID)
+	if config.IsDevelopment() {
+		fmt.Printf("🔵 ClockOut: userID=%d\n", userIDInt)
+	}
 
 	inRange := true
 
 	var attendanceID int
-	err = database.DB.QueryRow(
+	err := database.DB.QueryRow(
 		"INSERT INTO attendances (user_id, type, status, latitude, longitude, photo_selfie, in_range, force_attendance, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id",
-		userID, "out", "approved", req.Latitude, req.Longitude, req.PhotoSelfie, inRange, req.Force, time.Now(),
+		userIDInt, "out", "approved", req.Latitude, req.Longitude, req.PhotoSelfie, inRange, req.Force, time.Now(),
 	).Scan(&attendanceID)
 
 	if err != nil {
-		log.Printf("🔴 ClockOut database error: %v", err)
-		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to clock out: "+err.Error())
+		if config.IsDevelopment() {
+			fmt.Printf("🔴 ClockOut database error: %v\n", err)
+		}
+		utils.GinErrorResponse(c, http.StatusInternalServerError, "Failed to clock out")
 		return
 	}
 
-	log.Printf("🔵 ClockOut successful: attendanceID=%d", attendanceID)
+	if config.IsDevelopment() {
+		fmt.Printf("🔵 ClockOut successful: attendanceID=%d\n", attendanceID)
+	}
 
 	response := AttendanceResponse{
 		ID:              attendanceID,
-		UserID:          userID,
+		UserID:          userIDInt,
 		Type:            "out",
 		Status:          "approved",
 		Latitude:        req.Latitude,
@@ -239,7 +273,7 @@ func ClockOut(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:       time.Now(),
 	}
 
-	utils.SuccessResponse(w, http.StatusOK, "Clock out successful", response)
+	utils.GinSuccessResponse(c, http.StatusOK, "Clock out successful", response)
 }
 
 // GetAttendance godoc
@@ -251,40 +285,49 @@ func ClockOut(w http.ResponseWriter, r *http.Request) {
 // @Security BearerAuth
 // @Param date query string false "Filter by date (YYYY-MM-DD)"
 // @Param limit query int false "Limit number of records (default: 30)"
-// @Success 200 {object} SuccessResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 401 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
+// @Success 200 {object} utils.GinResponse
+// @Failure 400 {object} utils.GinResponse
+// @Failure 401 {object} utils.GinResponse
+// @Failure 500 {object} utils.GinResponse
 // @Router /attendance [get]
-func GetAttendance(w http.ResponseWriter, r *http.Request) {
-	log.Println("🔵 GetAttendance started")
+func GetAttendance(c *gin.Context) {
+	if config.IsDevelopment() {
+		fmt.Println("🔵 GetAttendance started")
+	}
 
 	defer func() {
 		if err := recover(); err != nil {
-			log.Printf("🚨 GetAttendance PANIC: %v", err)
-			utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to get attendance")
+			if config.IsDevelopment() {
+				fmt.Printf("🚨 GetAttendance PANIC: %v\n", err)
+			}
+			utils.GinErrorResponse(c, http.StatusInternalServerError, "Failed to get attendance")
 		}
 	}()
 
-	userIDVal := r.Context().Value("userID")
-	if userIDVal == nil {
-		log.Printf("🔴 GetAttendance: userID not found in context")
-		utils.ErrorResponse(w, http.StatusUnauthorized, "User not authenticated")
+	userID, exists := c.Get("userID")
+	if !exists {
+		if config.IsDevelopment() {
+			fmt.Println("🔴 GetAttendance: userID not found in context")
+		}
+		utils.GinErrorResponse(c, http.StatusUnauthorized, "User not authenticated")
 		return
 	}
 
-	userID, ok := userIDVal.(int)
+	userIDInt, ok := userID.(int)
 	if !ok {
-		log.Printf("🔴 GetAttendance: userID type assertion failed")
-		utils.ErrorResponse(w, http.StatusInternalServerError, "Invalid user ID")
+		if config.IsDevelopment() {
+			fmt.Println("🔴 GetAttendance: userID type assertion failed")
+		}
+		utils.GinErrorResponse(c, http.StatusInternalServerError, "Invalid user ID")
 		return
 	}
 
-	log.Printf("🔵 GetAttendance: userID=%d", userID)
+	if config.IsDevelopment() {
+		fmt.Printf("🔵 GetAttendance: userID=%d\n", userIDInt)
+	}
 
-	query := r.URL.Query()
-	dateFilter := query.Get("date")
-	limitStr := query.Get("limit")
+	dateFilter := c.Query("date")
+	limitStr := c.Query("limit")
 
 	var limit int
 	if limitStr == "" {
@@ -302,18 +345,20 @@ func GetAttendance(w http.ResponseWriter, r *http.Request) {
 	if dateFilter != "" {
 		rows, err = database.DB.Query(
 			"SELECT id, user_id, type, status, latitude, longitude, photo_selfie, in_range, force_attendance, created_at FROM attendances WHERE user_id = $1 AND DATE(created_at) = $2 ORDER BY created_at DESC LIMIT $3",
-			userID, dateFilter, limit,
+			userIDInt, dateFilter, limit,
 		)
 	} else {
 		rows, err = database.DB.Query(
 			"SELECT id, user_id, type, status, latitude, longitude, photo_selfie, in_range, force_attendance, created_at FROM attendances WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2",
-			userID, limit,
+			userIDInt, limit,
 		)
 	}
 
 	if err != nil {
-		log.Printf("🔴 GetAttendance database error: %v", err)
-		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to fetch attendance records")
+		if config.IsDevelopment() {
+			fmt.Printf("🔴 GetAttendance database error: %v\n", err)
+		}
+		utils.GinErrorResponse(c, http.StatusInternalServerError, "Failed to fetch attendance records")
 		return
 	}
 	defer rows.Close()
@@ -327,7 +372,9 @@ func GetAttendance(w http.ResponseWriter, r *http.Request) {
 			&att.InRange, &att.ForceAttendance, &att.CreatedAt,
 		)
 		if err != nil {
-			log.Printf("🔴 GetAttendance scan error: %v", err)
+			if config.IsDevelopment() {
+				fmt.Printf("🔴 GetAttendance scan error: %v\n", err)
+			}
 			continue
 		}
 
@@ -345,6 +392,9 @@ func GetAttendance(w http.ResponseWriter, r *http.Request) {
 		attendances = append(attendances, attendance)
 	}
 
-	log.Printf("🔵 GetAttendance successful: found %d records", len(attendances))
-	utils.SuccessResponse(w, http.StatusOK, "Attendance records retrieved", attendances)
+	if config.IsDevelopment() {
+		fmt.Printf("🔵 GetAttendance successful: found %d records\n", len(attendances))
+	}
+
+	utils.GinSuccessResponse(c, http.StatusOK, "Attendance records retrieved", attendances)
 }

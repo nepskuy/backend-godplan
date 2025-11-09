@@ -2,20 +2,35 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 
-	"github.com/nepskuy/be-godplan/pkg/database"
-	"github.com/nepskuy/be-godplan/pkg/models"
-
 	"github.com/gorilla/mux"
 	"golang.org/x/crypto/bcrypt"
+
+	"github.com/nepskuy/be-godplan/pkg/config"
+	"github.com/nepskuy/be-godplan/pkg/database"
+	"github.com/nepskuy/be-godplan/pkg/models"
+	"github.com/nepskuy/be-godplan/pkg/utils"
 )
 
 func GetUsers(w http.ResponseWriter, r *http.Request) {
+	// Check database connection
+	if err := database.HealthCheck(); err != nil {
+		if config.IsDevelopment() {
+			fmt.Printf("❌ Database connection error in GetUsers: %v\n", err)
+		}
+		utils.ErrorResponse(w, http.StatusServiceUnavailable, "Database connection lost")
+		return
+	}
+
 	rows, err := database.DB.Query("SELECT id, username, email, created_at FROM users")
 	if err != nil {
-		http.Error(w, `{"error": "Failed to fetch users"}`, http.StatusInternalServerError)
+		if config.IsDevelopment() {
+			fmt.Printf("❌ Failed to fetch users: %v\n", err)
+		}
+		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to fetch users")
 		return
 	}
 	defer rows.Close()
@@ -25,28 +40,51 @@ func GetUsers(w http.ResponseWriter, r *http.Request) {
 		var user models.User
 		err := rows.Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt)
 		if err != nil {
-			http.Error(w, `{"error": "Failed to scan user"}`, http.StatusInternalServerError)
-			return
+			if config.IsDevelopment() {
+				fmt.Printf("❌ Failed to scan user: %v\n", err)
+			}
+			continue // Skip invalid rows instead of failing entire request
 		}
 		users = append(users, user)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(users)
+	if config.IsDevelopment() {
+		fmt.Printf("✅ GetUsers successful: found %d users\n", len(users))
+	}
+
+	utils.SuccessResponse(w, http.StatusOK, "Users retrieved successfully", users)
 }
 
 func CreateUser(w http.ResponseWriter, r *http.Request) {
+	// Check database connection
+	if err := database.HealthCheck(); err != nil {
+		if config.IsDevelopment() {
+			fmt.Printf("❌ Database connection error in CreateUser: %v\n", err)
+		}
+		utils.ErrorResponse(w, http.StatusServiceUnavailable, "Database connection lost")
+		return
+	}
+
 	var user models.User
 	err := json.NewDecoder(r.Body).Decode(&user)
 	if err != nil {
-		http.Error(w, `{"error": "Invalid request body"}`, http.StatusBadRequest)
+		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Validate required fields
+	if user.Username == "" || user.Email == "" || user.Password == "" {
+		utils.ErrorResponse(w, http.StatusBadRequest, "Username, email, and password are required")
 		return
 	}
 
 	// Hash password
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 	if err != nil {
-		http.Error(w, `{"error": "Failed to hash password"}`, http.StatusInternalServerError)
+		if config.IsDevelopment() {
+			fmt.Printf("❌ Failed to hash password: %v\n", err)
+		}
+		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to process request")
 		return
 	}
 
@@ -57,22 +95,37 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 	).Scan(&id)
 
 	if err != nil {
-		http.Error(w, `{"error": "Failed to create user"}`, http.StatusInternalServerError)
+		if config.IsDevelopment() {
+			fmt.Printf("❌ Failed to create user: %v\n", err)
+		}
+		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to create user")
 		return
 	}
 
 	user.ID = id
-	user.Password = ""
+	user.Password = "" // Clear password from response
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(user)
+	if config.IsDevelopment() {
+		fmt.Printf("✅ CreateUser successful: ID=%d, Username=%s\n", user.ID, user.Username)
+	}
+
+	utils.SuccessResponse(w, http.StatusCreated, "User created successfully", user)
 }
 
 func GetUser(w http.ResponseWriter, r *http.Request) {
+	// Check database connection
+	if err := database.HealthCheck(); err != nil {
+		if config.IsDevelopment() {
+			fmt.Printf("❌ Database connection error in GetUser: %v\n", err)
+		}
+		utils.ErrorResponse(w, http.StatusServiceUnavailable, "Database connection lost")
+		return
+	}
+
 	vars := mux.Vars(r)
 	id, err := strconv.Atoi(vars["id"])
 	if err != nil {
-		http.Error(w, `{"error": "Invalid user ID"}`, http.StatusBadRequest)
+		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid user ID")
 		return
 	}
 
@@ -83,10 +136,16 @@ func GetUser(w http.ResponseWriter, r *http.Request) {
 	).Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt)
 
 	if err != nil {
-		http.Error(w, `{"error": "User not found"}`, http.StatusNotFound)
+		if config.IsDevelopment() {
+			fmt.Printf("❌ User not found: ID=%d, error=%v\n", id, err)
+		}
+		utils.ErrorResponse(w, http.StatusNotFound, "User not found")
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(user)
+	if config.IsDevelopment() {
+		fmt.Printf("✅ GetUser successful: ID=%d, Username=%s\n", user.ID, user.Username)
+	}
+
+	utils.SuccessResponse(w, http.StatusOK, "User retrieved successfully", user)
 }

@@ -156,10 +156,11 @@ func setupRouter() *mux.Router {
 	protectedAPI.HandleFunc("/tasks/{id}", handlers.UpdateTask).Methods("PUT")
 	protectedAPI.HandleFunc("/tasks/{id}", handlers.DeleteTask).Methods("DELETE")
 
-	protectedAPI.HandleFunc("/attendance/clock-in", handlers.ClockIn).Methods("POST")
-	protectedAPI.HandleFunc("/attendance/clock-out", handlers.ClockOut).Methods("POST")
-	protectedAPI.HandleFunc("/attendance/check-location", handlers.CheckLocation).Methods("POST")
-	protectedAPI.HandleFunc("/attendance", handlers.GetAttendance).Methods("GET")
+	// Gunakan HTTP handlers untuk attendance (bukan Gin handlers)
+	protectedAPI.HandleFunc("/attendance/clock-in", handlers.ClockInHTTP).Methods("POST")
+	protectedAPI.HandleFunc("/attendance/clock-out", handlers.ClockOutHTTP).Methods("POST")
+	protectedAPI.HandleFunc("/attendance/check-location", handlers.CheckLocationHTTP).Methods("POST")
+	protectedAPI.HandleFunc("/attendance", handlers.GetAttendanceHTTP).Methods("GET")
 
 	router.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		utils.ErrorResponse(w, http.StatusNotFound, "Route not found: "+r.URL.Path)
