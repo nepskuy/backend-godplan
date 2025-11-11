@@ -62,12 +62,33 @@ func ClockInHTTP(w http.ResponseWriter, r *http.Request) {
 		log.Printf("🔵 ClockInHTTP: userID=%d", userID)
 	}
 
-	inRange := true
+	// 🔥 NEW: Validasi lokasi
+	inRange, distance := utils.IsWithinOfficeRange(req.Latitude, req.Longitude)
+	cfg := config.Load()
+
+	// Jika tidak dalam range dan tidak menggunakan force, tolak attendance
+	if !inRange && !req.Force {
+		if config.IsDevelopment() {
+			log.Printf("🔴 ClockInHTTP: Location out of range (%.0fm > %.0fm)", distance, cfg.AttendanceRadiusMeters)
+		}
+		utils.ErrorResponse(w, http.StatusBadRequest,
+			"Lokasi di luar jangkauan kantor. Gunakan force=true untuk tetap melanjutkan.")
+		return
+	}
+
+	// Tentukan status berdasarkan lokasi dan force
+	status := "approved"
+	if !inRange && req.Force {
+		status = "forced"
+		if config.IsDevelopment() {
+			log.Printf("🟡 ClockInHTTP: Using forced attendance (%.0fm > %.0fm)", distance, cfg.AttendanceRadiusMeters)
+		}
+	}
 
 	var attendanceID int
 	err = database.DB.QueryRow(
 		"INSERT INTO attendances (user_id, type, status, latitude, longitude, photo_selfie, in_range, force_attendance, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id",
-		userID, "in", "approved", req.Latitude, req.Longitude, req.PhotoSelfie, inRange, req.Force, time.Now(),
+		userID, "in", status, req.Latitude, req.Longitude, req.PhotoSelfie, inRange, req.Force, time.Now(),
 	).Scan(&attendanceID)
 
 	if err != nil {
@@ -79,19 +100,22 @@ func ClockInHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if config.IsDevelopment() {
-		log.Printf("🔵 ClockInHTTP successful: attendanceID=%d", attendanceID)
+		log.Printf("🔵 ClockInHTTP successful: attendanceID=%d, status=%s, inRange=%t", attendanceID, status, inRange)
 	}
 
 	response := AttendanceResponse{
 		ID:              attendanceID,
 		UserID:          userID,
 		Type:            "in",
-		Status:          "approved",
+		Status:          status,
 		Latitude:        req.Latitude,
 		Longitude:       req.Longitude,
+		PhotoSelfie:     req.PhotoSelfie,
 		InRange:         inRange,
 		ForceAttendance: req.Force,
 		CreatedAt:       time.Now(),
+		Distance:        distance,
+		MaxRadius:       cfg.AttendanceRadiusMeters,
 	}
 
 	utils.SuccessResponse(w, http.StatusCreated, "Clock in successful", response)
@@ -145,12 +169,33 @@ func ClockOutHTTP(w http.ResponseWriter, r *http.Request) {
 		log.Printf("🔵 ClockOutHTTP: userID=%d", userID)
 	}
 
-	inRange := true
+	// 🔥 NEW: Validasi lokasi
+	inRange, distance := utils.IsWithinOfficeRange(req.Latitude, req.Longitude)
+	cfg := config.Load()
+
+	// Jika tidak dalam range dan tidak menggunakan force, tolak attendance
+	if !inRange && !req.Force {
+		if config.IsDevelopment() {
+			log.Printf("🔴 ClockOutHTTP: Location out of range (%.0fm > %.0fm)", distance, cfg.AttendanceRadiusMeters)
+		}
+		utils.ErrorResponse(w, http.StatusBadRequest,
+			"Lokasi di luar jangkauan kantor. Gunakan force=true untuk tetap melanjutkan.")
+		return
+	}
+
+	// Tentukan status berdasarkan lokasi dan force
+	status := "approved"
+	if !inRange && req.Force {
+		status = "forced"
+		if config.IsDevelopment() {
+			log.Printf("🟡 ClockOutHTTP: Using forced attendance (%.0fm > %.0fm)", distance, cfg.AttendanceRadiusMeters)
+		}
+	}
 
 	var attendanceID int
 	err = database.DB.QueryRow(
 		"INSERT INTO attendances (user_id, type, status, latitude, longitude, photo_selfie, in_range, force_attendance, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id",
-		userID, "out", "approved", req.Latitude, req.Longitude, req.PhotoSelfie, inRange, req.Force, time.Now(),
+		userID, "out", status, req.Latitude, req.Longitude, req.PhotoSelfie, inRange, req.Force, time.Now(),
 	).Scan(&attendanceID)
 
 	if err != nil {
@@ -162,19 +207,22 @@ func ClockOutHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if config.IsDevelopment() {
-		log.Printf("🔵 ClockOutHTTP successful: attendanceID=%d", attendanceID)
+		log.Printf("🔵 ClockOutHTTP successful: attendanceID=%d, status=%s, inRange=%t", attendanceID, status, inRange)
 	}
 
 	response := AttendanceResponse{
 		ID:              attendanceID,
 		UserID:          userID,
 		Type:            "out",
-		Status:          "approved",
+		Status:          status,
 		Latitude:        req.Latitude,
 		Longitude:       req.Longitude,
+		PhotoSelfie:     req.PhotoSelfie,
 		InRange:         inRange,
 		ForceAttendance: req.Force,
 		CreatedAt:       time.Now(),
+		Distance:        distance,
+		MaxRadius:       cfg.AttendanceRadiusMeters,
 	}
 
 	utils.SuccessResponse(w, http.StatusOK, "Clock out successful", response)
@@ -205,11 +253,14 @@ func CheckLocationHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 🔥 NEW: Gunakan location validation dari utils
+	validation := utils.ValidateLocation(req.Latitude, req.Longitude)
+
 	response := models.LocationValidationResponse{
-		InRange:   true,
-		Message:   "Lokasi valid, dalam jangkauan kantor",
-		NeedForce: false,
-		Distance:  50.0,
+		InRange:   validation.InRange,
+		Message:   validation.Message,
+		NeedForce: validation.NeedForce,
+		Distance:  validation.Distance,
 	}
 
 	utils.SuccessResponse(w, http.StatusOK, "Location validation successful", response)
@@ -313,6 +364,7 @@ func GetAttendanceHTTP(w http.ResponseWriter, r *http.Request) {
 			Status:          att.Status,
 			Latitude:        att.Latitude,
 			Longitude:       att.Longitude,
+			PhotoSelfie:     att.PhotoSelfie,
 			InRange:         att.InRange,
 			ForceAttendance: att.ForceAttendance,
 			CreatedAt:       att.CreatedAt,

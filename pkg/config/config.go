@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -19,6 +20,12 @@ type Config struct {
 	JWTSecret     string
 	DatabaseURL   string
 	Env           string
+
+	// 🔥 NEW: Office Location Configuration
+	OfficeLatitude         float64
+	OfficeLongitude        float64
+	AttendanceRadiusMeters float64
+	EnableLocationCheck    bool
 }
 
 // Variabel cache untuk environment
@@ -41,6 +48,13 @@ func Load() *Config {
 		JWTSecret:     getEnv("JWT_SECRET", "dev-secret-key-change-in-production"),
 		DatabaseURL:   os.Getenv("DATABASE_URL"),
 		Env:           getEnv("ENV", "development"),
+
+		// 🔥 NEW: Office Location Config
+		// Kantor: -6.305881740196891, 106.67821564820207
+		OfficeLatitude:         getEnvFloat("OFFICE_LATITUDE", -6.305881740196891),
+		OfficeLongitude:        getEnvFloat("OFFICE_LONGITUDE", 106.67821564820207),
+		AttendanceRadiusMeters: getEnvFloat("ATTENDANCE_RADIUS_METERS", 100), // 100 meter default
+		EnableLocationCheck:    getEnvBool("ENABLE_LOCATION_CHECK", true),
 	}
 
 	// Hanya log di development
@@ -64,6 +78,11 @@ func logConfig(cfg *Config) {
 		fmt.Printf("📝 DB Host: %s, Port: %s, User: %s, Name: %s\n",
 			cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBName)
 	}
+
+	// 🔥 NEW: Log office location
+	fmt.Printf("🏢 Office Location: %.6f, %.6f\n", cfg.OfficeLatitude, cfg.OfficeLongitude)
+	fmt.Printf("📏 Attendance Radius: %.0f meters\n", cfg.AttendanceRadiusMeters)
+	fmt.Printf("📍 Location Check Enabled: %t\n", cfg.EnableLocationCheck)
 
 	fmt.Println("✅ Configuration loaded successfully")
 }
@@ -158,9 +177,7 @@ func getEnv(key, defaultValue string) string {
 	value := os.Getenv(key)
 	if value == "" {
 		// Hanya log di development untuk non-sensitive values
-		// PERBAIKAN: Hindari panggilan IsDevelopment() di sini untuk mencegah rekursi
 		if key != "DB_PASSWORD" && key != "JWT_SECRET" {
-			// Gunakan os.Getenv langsung untuk cek environment
 			env := os.Getenv("ENV")
 			if env == "" || env == "development" {
 				fmt.Printf("⚙️ Using default for %s: %s\n", key, defaultValue)
@@ -170,7 +187,6 @@ func getEnv(key, defaultValue string) string {
 	}
 
 	// Hanya log di development
-	// PERBAIKAN: Hindari panggilan IsDevelopment() di sini
 	if key != "DB_PASSWORD" && key != "JWT_SECRET" {
 		env := os.Getenv("ENV")
 		if env == "" || env == "development" {
@@ -186,13 +202,42 @@ func getEnv(key, defaultValue string) string {
 	return value
 }
 
-// IsProduction mengecek environment - PERBAIKAN: Hindari rekursi
+// 🔥 NEW: getEnvFloat mendapatkan environment variable sebagai float64
+func getEnvFloat(key string, defaultValue float64) float64 {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+
+	result, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		fmt.Printf("❌ Invalid float value for %s: %s, using default: %f\n", key, value, defaultValue)
+		return defaultValue
+	}
+	return result
+}
+
+// 🔥 NEW: getEnvBool mendapatkan environment variable sebagai bool
+func getEnvBool(key string, defaultValue bool) bool {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+
+	result, err := strconv.ParseBool(value)
+	if err != nil {
+		fmt.Printf("❌ Invalid bool value for %s: %s, using default: %t\n", key, value, defaultValue)
+		return defaultValue
+	}
+	return result
+}
+
+// IsProduction mengecek environment
 func IsProduction() bool {
 	if isProduction != nil {
 		return *isProduction
 	}
 
-	// Gunakan os.Getenv langsung, jangan panggil getEnv()
 	result := os.Getenv("VERCEL") != "" ||
 		os.Getenv("ENVIRONMENT") == "production" ||
 		os.Getenv("ENV") == "production"
@@ -201,7 +246,7 @@ func IsProduction() bool {
 	return result
 }
 
-// IsDevelopment mengecek environment - PERBAIKAN: Hindari rekursi
+// IsDevelopment mengecek environment
 func IsDevelopment() bool {
 	if isDevelopment != nil {
 		return *isDevelopment
