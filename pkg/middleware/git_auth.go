@@ -12,7 +12,8 @@ func GinAuthMiddleware() gin.HandlerFunc {
 		// Skip auth for public routes
 		if c.Request.URL.Path == "/api/v1/auth/login" ||
 			c.Request.URL.Path == "/api/v1/auth/register" ||
-			c.Request.URL.Path == "/health" {
+			c.Request.URL.Path == "/health" ||
+			c.Request.URL.Path == "/api/v1/health" {
 			c.Next()
 			return
 		}
@@ -34,7 +35,7 @@ func GinAuthMiddleware() gin.HandlerFunc {
 
 		tokenString := parts[1]
 
-		// Validate token and get claims
+		// Validate token and get claims - pakai jwtUtil dari auth.go
 		claims, err := jwtUtil.ValidateToken(tokenString)
 		if err != nil {
 			c.JSON(401, gin.H{"error": "Invalid token"})

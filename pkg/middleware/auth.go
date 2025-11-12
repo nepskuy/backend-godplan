@@ -8,7 +8,7 @@ import (
 	"github.com/nepskuy/be-godplan/pkg/utils"
 )
 
-// Simpan JWT util instance
+// Simpan JWT util instance - TETAP DI SINI
 var jwtUtil = utils.NewJWTUtil("your-secret-key-change-in-production")
 
 func AuthMiddleware(next http.Handler) http.Handler {

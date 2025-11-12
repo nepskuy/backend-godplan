@@ -147,7 +147,7 @@ func setupGinRouter(userRepo *repository.UserRepository) *gin.Engine {
 
 		// Protected routes - Authentication required
 		protected := api.Group("")
-		protected.Use(middleware.GinAuthMiddleware())
+		protected.Use(middleware.GinAuthMiddleware()) // ← PAKAI GIN AUTH MIDDLEWARE
 		{
 			// User routes
 			protected.GET("/users", ginAuthWrapper(handlers.GetUsers))
