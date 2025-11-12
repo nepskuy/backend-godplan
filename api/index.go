@@ -6,17 +6,18 @@ import (
 	"os"
 	"time"
 
-	"github.com/gorilla/mux"
+	"github.com/gin-gonic/gin"
 	"github.com/nepskuy/be-godplan/pkg/database"
 	"github.com/nepskuy/be-godplan/pkg/handlers"
 	"github.com/nepskuy/be-godplan/pkg/middleware"
-	"github.com/nepskuy/be-godplan/pkg/utils"
+	"github.com/nepskuy/be-godplan/pkg/repository"
 )
 
-var router *mux.Router
+var router *gin.Engine
+var userRepo *repository.UserRepository
 
 func init() {
-	log.Printf("🚀 Initializing GodPlan API for Vercel...")
+	log.Printf("🚀 Initializing GodPlan API for Vercel with GIN...")
 
 	// Initialize database
 	if err := database.InitDB(); err != nil {
@@ -25,88 +26,124 @@ func init() {
 		log.Printf("✅ Database connected successfully")
 	}
 
-	router = mux.NewRouter()
-	setupRoutes()
+	// Setup repository
+	db := database.GetDB()
+	userRepo = repository.NewUserRepository(db)
+
+	// Setup Gin
+	setupGin()
 }
 
-// CORS middleware langsung di file ini
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Log CORS request
-		log.Printf("🌐 CORS Middleware - Origin: %s, Method: %s", r.Header.Get("Origin"), r.Method)
+func setupGin() {
+	// Set Gin to release mode for production
+	gin.SetMode(gin.ReleaseMode)
 
-		// Allow multiple origins
-		origin := r.Header.Get("Origin")
-		allowedOrigins := []string{
-			"http://localhost:3000",
-			"https://localhost:3000",
-			"https://fe-godplan.vercel.app",
-			"https://godplan.godjahstudio.com",
-			"https://be-godplan.godjahstudio.com",
-		}
+	router = gin.New()
 
-		// Check if origin is allowed
-		for _, o := range allowedOrigins {
-			if origin == o {
-				w.Header().Set("Access-Control-Allow-Origin", origin)
-				break
-			}
-		}
+	log.Printf("🟡 Registering Gin middleware...")
 
-		// Fallback untuk development
-		if w.Header().Get("Access-Control-Allow-Origin") == "" {
-			w.Header().Set("Access-Control-Allow-Origin", "https://godplan.godjahstudio.com")
-		}
+	// Apply middleware
+	router.Use(gin.Recovery())
+	router.Use(middleware.GinCORS())
+	router.Use(middleware.GinLogging())
+	router.Use(middleware.GinDatabaseCheck())
 
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept, Origin, X-CSRF-Token")
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
-		w.Header().Set("Access-Control-Max-Age", "86400")
-		w.Header().Set("Access-Control-Expose-Headers", "Content-Length, Content-Type, Authorization")
+	log.Printf("🟢 Gin middleware registered")
 
-		// Handle preflight requests
-		if r.Method == "OPTIONS" {
-			log.Printf("✅ CORS Preflight handled for: %s", r.URL.Path)
-			w.WriteHeader(http.StatusOK)
-			return
-		}
+	// Health check endpoints
+	router.GET("/health", ginHealthCheck)
+	router.GET("/api/v1/health", ginHealthCheck)
 
-		next.ServeHTTP(w, r)
+	// Swagger routes
+	router.GET("/swagger", ginSwaggerHandler)
+	router.GET("/swagger.json", func(c *gin.Context) {
+		c.File("./docs/swagger.json")
 	})
+	router.GET("/", func(c *gin.Context) {
+		c.Redirect(http.StatusFound, "/swagger")
+	})
+
+	// API Routes
+	api := router.Group("/api/v1")
+	{
+		// Public routes - No authentication required
+		public := api.Group("/auth")
+		{
+			public.POST("/register", ginHandlerWrapper(handlers.Register))
+			public.POST("/login", ginHandlerWrapper(handlers.Login))
+		}
+
+		// Protected routes - Authentication required
+		protected := api.Group("")
+		protected.Use(middleware.GinAuthMiddleware())
+		{
+			// User routes
+			protected.GET("/users", ginHandlerWrapper(handlers.GetUsers))
+			protected.POST("/users", ginHandlerWrapper(handlers.CreateUser))
+			protected.GET("/users/:id", ginHandlerWrapper(handlers.GetUser))
+
+			// Profile routes - NEWLY ADDED
+			protected.GET("/profile", handlers.GinGetProfile(userRepo))
+
+			// Task routes
+			protected.GET("/tasks", ginHandlerWrapper(handlers.GetTasks))
+			protected.POST("/tasks", ginHandlerWrapper(handlers.CreateTask))
+			protected.GET("/tasks/:id", ginHandlerWrapper(handlers.GetTask))
+			protected.PUT("/tasks/:id", ginHandlerWrapper(handlers.UpdateTask))
+			protected.DELETE("/tasks/:id", ginHandlerWrapper(handlers.DeleteTask))
+
+			// Attendance routes
+			protected.POST("/attendance/clock-in", ginHandlerWrapper(handlers.ClockInHTTP))
+			protected.POST("/attendance/clock-out", ginHandlerWrapper(handlers.ClockOutHTTP))
+			protected.POST("/attendance/check-location", ginHandlerWrapper(handlers.CheckLocationHTTP))
+			protected.GET("/attendance", ginHandlerWrapper(handlers.GetAttendanceHTTP))
+		}
+	}
+
+	// 404 handler
+	router.NoRoute(func(c *gin.Context) {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Route not found: " + c.Request.URL.Path,
+		})
+	})
+
+	log.Printf("✅ GodPlan API with GIN initialized successfully for Vercel")
 }
 
-func setupRoutes() {
-	router.StrictSlash(true)
+// ginHandlerWrapper converts existing HTTP handlers to Gin handlers
+func ginHandlerWrapper(handler http.HandlerFunc) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		handler(c.Writer, c.Request)
+	}
+}
 
-	log.Printf("🟡 Registering middleware...")
+func ginHealthCheck(c *gin.Context) {
+	dbStatus := "connected"
+	if err := database.HealthCheck(); err != nil {
+		dbStatus = "disconnected"
+		log.Printf("❌ Database health check failed: %v", err)
+	}
 
-	// Gunakan CORS middleware langsung di sini
-	router.Use(corsMiddleware)
-	router.Use(middleware.Logging)
-	router.Use(middleware.DatabaseCheck)
-	router.Use(middleware.Recovery)
+	platform := "vercel"
+	if os.Getenv("VERCEL") == "" {
+		platform = "local"
+	}
 
-	// Global OPTIONS handler
-	router.Methods(http.MethodOptions).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("⚙️ Global OPTIONS handler triggered for %s", r.URL.Path)
-		w.WriteHeader(http.StatusOK)
-	})
+	response := map[string]interface{}{
+		"status":    "ok",
+		"service":   "godplan-backend",
+		"database":  dbStatus,
+		"timestamp": time.Now().Format(time.RFC3339),
+		"platform":  platform,
+		"framework": "gin",
+	}
 
-	log.Printf("🟢 Middleware registered: CORS, Logging, DatabaseCheck, Recovery")
+	c.JSON(http.StatusOK, response)
+}
 
-	// Health check endpoint (public)
-	router.HandleFunc("/health", healthCheck).Methods("GET", "OPTIONS")
-	router.HandleFunc("/api/v1/health", healthCheck).Methods("GET", "OPTIONS")
-
-	// Swagger
-	router.HandleFunc("/swagger.json", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "./docs/swagger.json")
-	}).Methods("GET")
-
-	swaggerHandler := func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html")
-		w.Write([]byte(`
-<!DOCTYPE html>
+func ginSwaggerHandler(c *gin.Context) {
+	c.Header("Content-Type", "text/html")
+	c.String(http.StatusOK, `<!DOCTYPE html>
 <html>
 <head>
     <title>GodPlan API Documentation</title>
@@ -126,73 +163,7 @@ func setupRoutes() {
         });
     </script>
 </body>
-</html>
-		`))
-	}
-
-	router.HandleFunc("/swagger", swaggerHandler).Methods("GET")
-	router.HandleFunc("/swagger/", swaggerHandler).Methods("GET")
-
-	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/swagger", http.StatusFound)
-	}).Methods("GET")
-
-	// Public API routes
-	publicAPI := router.PathPrefix("/api/v1").Subrouter()
-	publicAPI.HandleFunc("/auth/register", handlers.Register).Methods("POST", "OPTIONS")
-	publicAPI.HandleFunc("/auth/login", handlers.Login).Methods("POST", "OPTIONS")
-
-	// Protected API routes
-	protectedAPI := router.PathPrefix("/api/v1").Subrouter()
-	protectedAPI.Use(middleware.AuthMiddleware)
-
-	protectedAPI.HandleFunc("/users", handlers.GetUsers).Methods("GET")
-	protectedAPI.HandleFunc("/users", handlers.CreateUser).Methods("POST")
-	protectedAPI.HandleFunc("/users/{id}", handlers.GetUser).Methods("GET")
-
-	// Task handlers (gunakan placeholder untuk yang belum ada)
-	protectedAPI.HandleFunc("/tasks", notImplementedHandler).Methods("GET")
-	protectedAPI.HandleFunc("/tasks", notImplementedHandler).Methods("POST")
-	protectedAPI.HandleFunc("/tasks/{id}", notImplementedHandler).Methods("GET")
-	protectedAPI.HandleFunc("/tasks/{id}", notImplementedHandler).Methods("PUT")
-	protectedAPI.HandleFunc("/tasks/{id}", notImplementedHandler).Methods("DELETE")
-
-	// Gunakan HTTP handlers untuk attendance
-	protectedAPI.HandleFunc("/attendance/clock-in", handlers.ClockInHTTP).Methods("POST")
-	protectedAPI.HandleFunc("/attendance/clock-out", handlers.ClockOutHTTP).Methods("POST")
-	protectedAPI.HandleFunc("/attendance/check-location", handlers.CheckLocationHTTP).Methods("POST")
-	protectedAPI.HandleFunc("/attendance", handlers.GetAttendanceHTTP).Methods("GET")
-
-	router.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		utils.ErrorResponse(w, http.StatusNotFound, "Route not found: "+r.URL.Path)
-	})
-
-	log.Printf("✅ GodPlan API initialized successfully for Vercel")
-}
-
-func notImplementedHandler(w http.ResponseWriter, r *http.Request) {
-	utils.ErrorResponse(w, http.StatusNotImplemented, "Handler not implemented")
-}
-
-func healthCheck(w http.ResponseWriter, r *http.Request) {
-	dbStatus := "connected"
-	if err := database.HealthCheck(); err != nil {
-		dbStatus = "disconnected"
-		log.Printf("❌ Database health check failed: %v", err)
-	}
-
-	platform := "vercel"
-	if os.Getenv("VERCEL") == "" {
-		platform = "local"
-	}
-
-	utils.SuccessResponse(w, http.StatusOK, "Server is healthy", map[string]interface{}{
-		"status":    "ok",
-		"service":   "godplan-backend",
-		"database":  dbStatus,
-		"timestamp": time.Now().Format(time.RFC3339),
-		"platform":  platform,
-	})
+</html>`)
 }
 
 // Handler function untuk Vercel
