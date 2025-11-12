@@ -211,7 +211,30 @@ func ginSwaggerJSONHandler(c *gin.Context) {
 						},
 					},
 				},
-				// Add more paths as needed
+				"/api/v1/auth/login": map[string]interface{}{
+					"post": map[string]interface{}{
+						"summary": "Login user",
+						"requestBody": map[string]interface{}{
+							"required": true,
+							"content": map[string]interface{}{
+								"application/json": map[string]interface{}{
+									"schema": map[string]interface{}{
+										"type": "object",
+										"properties": map[string]interface{}{
+											"email":    map[string]interface{}{"type": "string"},
+											"password": map[string]interface{}{"type": "string"},
+										},
+									},
+								},
+							},
+						},
+						"responses": map[string]interface{}{
+							"200": map[string]interface{}{
+								"description": "Login successful",
+							},
+						},
+					},
+				},
 			},
 			"components": map[string]interface{}{
 				"securitySchemes": map[string]interface{}{
@@ -287,6 +310,11 @@ func ginSwaggerHandler(c *gin.Context) {
         .swagger-ui .info hgroup.main {
             text-align: center;
         }
+        .loading {
+            padding: 20px;
+            text-align: center;
+            font-family: Arial, sans-serif;
+        }
     </style>
 </head>
 <body>
@@ -295,26 +323,30 @@ func ginSwaggerHandler(c *gin.Context) {
     <script src="https://unpkg.com/swagger-ui-dist@5.9.0/swagger-ui-standalone-preset.js"></script>
     <script>
         window.onload = function() {
+            // Show loading message
+            document.getElementById('swagger-ui').innerHTML = '<div class="loading"><h3>Loading GodPlan API Documentation...</h3></div>';
+            
+            // Initialize Swagger UI
             const ui = SwaggerUIBundle({
                 url: '/swagger.json',
                 dom_id: '#swagger-ui',
                 deepLinking: true,
                 presets: [
                     SwaggerUIBundle.presets.apis,
-                    SwaggerUIBundle.presets.standalone
+                    SwaggerUIStandalonePreset
                 ],
                 plugins: [
                     SwaggerUIBundle.plugins.DownloadUrl
                 ],
                 layout: "StandaloneLayout",
                 validatorUrl: null,
-                defaultModelsExpandDepth: -1,
+                defaultModelsExpandDepth: 1,
                 operationsSorter: "alpha",
                 tagsSorter: "alpha",
                 docExpansion: "none",
-                onComplete: function() {
-                    console.log('Swagger UI loaded successfully');
-                }
+                filter: true,
+                showExtensions: true,
+                showCommonExtensions: true
             });
             
             // Error handling for Swagger JSON
@@ -331,10 +363,11 @@ func ginSwaggerHandler(c *gin.Context) {
                 .catch(error => {
                     console.error('Error loading Swagger JSON:', error);
                     document.getElementById('swagger-ui').innerHTML = 
-                        '<div style="padding: 20px; text-align: center;">' +
+                        '<div style="padding: 20px; text-align: center; font-family: Arial, sans-serif;">' +
                         '<h2>GodPlan API Documentation</h2>' +
                         '<p>Basic API documentation is loaded. For full Swagger documentation, generate swagger.json file.</p>' +
-                        '<p><strong>Error:</strong> ' + error.message + '</p>' +
+                        '<p style="color: red;"><strong>Error:</strong> ' + error.message + '</p>' +
+                        '<p><a href="/health">Check API Health</a></p>' +
                         '</div>';
                 });
         }
