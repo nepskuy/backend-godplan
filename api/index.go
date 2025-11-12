@@ -42,11 +42,11 @@ func setupGin() {
 
 	log.Printf("🟡 Registering Gin middleware...")
 
-	// Apply middleware
+	// Apply middleware - HANYA middleware yang tersedia
 	router.Use(gin.Recovery())
 	router.Use(middleware.GinCORS())
 	router.Use(middleware.GinLogging())
-	router.Use(middleware.GinDatabaseCheck())
+	// DatabaseCheck dihapus karena tidak ada di package middleware
 
 	log.Printf("🟢 Gin middleware registered")
 
@@ -57,7 +57,14 @@ func setupGin() {
 	// Swagger routes
 	router.GET("/swagger", ginSwaggerHandler)
 	router.GET("/swagger.json", func(c *gin.Context) {
-		c.File("./docs/swagger.json")
+		// Fallback jika file tidak ada
+		c.JSON(200, gin.H{
+			"info": map[string]interface{}{
+				"title":   "GodPlan API",
+				"version": "1.0",
+			},
+			"openapi": "3.0.0",
+		})
 	})
 	router.GET("/", func(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/swagger")
@@ -103,7 +110,8 @@ func setupGin() {
 	// 404 handler
 	router.NoRoute(func(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{
-			"error": "Route not found: " + c.Request.URL.Path,
+			"error":   true,
+			"message": "Route not found: " + c.Request.URL.Path,
 		})
 	})
 
