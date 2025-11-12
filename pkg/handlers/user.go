@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gorilla/mux"
 	"golang.org/x/crypto/bcrypt"
@@ -25,7 +26,12 @@ func GetUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := database.DB.Query("SELECT id, username, email, created_at FROM users")
+	// Query ke schema godplan
+	rows, err := database.DB.Query(`
+		SELECT id, username, email, role, full_name, phone, avatar_url, is_active, created_at, updated_at 
+		FROM godplan.users 
+		WHERE is_active = true
+	`)
 	if err != nil {
 		if config.IsDevelopment() {
 			fmt.Printf("❌ Failed to fetch users: %v\n", err)
@@ -38,12 +44,23 @@ func GetUsers(w http.ResponseWriter, r *http.Request) {
 	var users []models.User
 	for rows.Next() {
 		var user models.User
-		err := rows.Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt)
+		err := rows.Scan(
+			&user.ID,
+			&user.Username,
+			&user.Email,
+			&user.Role,
+			&user.FullName,
+			&user.Phone,
+			&user.AvatarURL,
+			&user.IsActive,
+			&user.CreatedAt,
+			&user.UpdatedAt,
+		)
 		if err != nil {
 			if config.IsDevelopment() {
 				fmt.Printf("❌ Failed to scan user: %v\n", err)
 			}
-			continue // Skip invalid rows instead of failing entire request
+			continue
 		}
 		users = append(users, user)
 	}
@@ -78,6 +95,14 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Set default values
+	if user.Role == "" {
+		user.Role = "employee"
+	}
+	if user.FullName == "" {
+		user.FullName = user.Username
+	}
+
 	// Hash password
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 	if err != nil {
@@ -88,28 +113,63 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var id int
+	var id int64
 	err = database.DB.QueryRow(
-		"INSERT INTO users (username, password, email) VALUES ($1, $2, $3) RETURNING id",
-		user.Username, string(hashedPassword), user.Email,
+		`INSERT INTO godplan.users (
+			username, email, password, role, full_name, phone, avatar_url, is_active, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
+		user.Username,
+		user.Email,
+		string(hashedPassword),
+		user.Role,
+		user.FullName,
+		user.Phone,
+		user.AvatarURL,
+		true, // is_active
+		time.Now(),
+		time.Now(),
 	).Scan(&id)
 
 	if err != nil {
 		if config.IsDevelopment() {
 			fmt.Printf("❌ Failed to create user: %v\n", err)
 		}
-		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to create user")
+		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to create user - user may already exist")
 		return
 	}
 
-	id = int(user.ID)
-	user.Password = "" // Clear password from response
+	// Get the created user to return complete data
+	var createdUser models.User
+	err = database.DB.QueryRow(
+		`SELECT id, username, email, role, full_name, phone, avatar_url, is_active, created_at, updated_at 
+		 FROM godplan.users WHERE id = $1`,
+		id,
+	).Scan(
+		&createdUser.ID,
+		&createdUser.Username,
+		&createdUser.Email,
+		&createdUser.Role,
+		&createdUser.FullName,
+		&createdUser.Phone,
+		&createdUser.AvatarURL,
+		&createdUser.IsActive,
+		&createdUser.CreatedAt,
+		&createdUser.UpdatedAt,
+	)
 
-	if config.IsDevelopment() {
-		fmt.Printf("✅ CreateUser successful: ID=%d, Username=%s\n", user.ID, user.Username)
+	if err != nil {
+		if config.IsDevelopment() {
+			fmt.Printf("❌ Failed to fetch created user: %v\n", err)
+		}
+		utils.ErrorResponse(w, http.StatusInternalServerError, "User created but failed to retrieve details")
+		return
 	}
 
-	utils.SuccessResponse(w, http.StatusCreated, "User created successfully", user)
+	if config.IsDevelopment() {
+		fmt.Printf("✅ CreateUser successful: ID=%d, Username=%s, Email=%s\n", createdUser.ID, createdUser.Username, createdUser.Email)
+	}
+
+	utils.SuccessResponse(w, http.StatusCreated, "User created successfully", createdUser)
 }
 
 func GetUser(w http.ResponseWriter, r *http.Request) {
@@ -131,9 +191,21 @@ func GetUser(w http.ResponseWriter, r *http.Request) {
 
 	var user models.User
 	err = database.DB.QueryRow(
-		"SELECT id, username, email, created_at FROM users WHERE id = $1",
+		`SELECT id, username, email, role, full_name, phone, avatar_url, is_active, created_at, updated_at 
+		 FROM godplan.users WHERE id = $1 AND is_active = true`,
 		id,
-	).Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt)
+	).Scan(
+		&user.ID,
+		&user.Username,
+		&user.Email,
+		&user.Role,
+		&user.FullName,
+		&user.Phone,
+		&user.AvatarURL,
+		&user.IsActive,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	)
 
 	if err != nil {
 		if config.IsDevelopment() {

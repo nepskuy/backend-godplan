@@ -5,18 +5,29 @@ import (
 )
 
 type User struct {
-	ID         int64     `json:"id" db:"id"`
-	Username   string    `json:"username" db:"username"`
-	Name       string    `json:"name" db:"name"`
-	Email      string    `json:"email" db:"email"`
-	Password   string    `json:"-" db:"password"`
-	EmployeeID string    `json:"employee_id,omitempty" db:"employee_id"`
-	NISN       string    `json:"nisn,omitempty" db:"nisn"`
-	Department string    `json:"department,omitempty" db:"department"`
-	Position   string    `json:"position,omitempty" db:"position"`
-	Status     string    `json:"status,omitempty" db:"status"`
-	Phone      string    `json:"phone,omitempty" db:"phone"`
-	Role       string    `json:"role" db:"role"`
-	CreatedAt  time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at" db:"updated_at"`
+	ID        int64     `json:"id" db:"id"`
+	Username  string    `json:"username" db:"username"`
+	Email     string    `json:"email" db:"email"`
+	Password  string    `json:"-" db:"password"`
+	Role      string    `json:"role" db:"role"`
+	FullName  string    `json:"full_name" db:"full_name"`
+	Phone     string    `json:"phone" db:"phone"`
+	AvatarURL string    `json:"avatar_url" db:"avatar_url"`
+	IsActive  bool      `json:"is_active" db:"is_active"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
+}
+
+type Employee struct {
+	ID             string    `json:"id" db:"id"`
+	UserID         string    `json:"user_id" db:"user_id"`
+	EmployeeID     string    `json:"employee_id" db:"employee_id"`
+	DepartmentID   string    `json:"department_id" db:"department_id"`
+	PositionID     string    `json:"position_id" db:"position_id"`
+	BaseSalary     float64   `json:"base_salary" db:"base_salary"`
+	JoinDate       string    `json:"join_date" db:"join_date"`
+	EmploymentType string    `json:"employment_type" db:"employment_type"`
+	WorkSchedule   string    `json:"work_schedule" db:"work_schedule"`
+	CreatedAt      time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at" db:"updated_at"`
 }
