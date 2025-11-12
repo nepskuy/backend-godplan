@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/nepskuy/be-godplan/pkg/config"
 	"github.com/nepskuy/be-godplan/pkg/database"
 	"github.com/nepskuy/be-godplan/pkg/handlers"
 	"github.com/nepskuy/be-godplan/pkg/middleware"
@@ -18,6 +19,20 @@ var userRepo *repository.UserRepository
 
 func init() {
 	log.Printf("🚀 Initializing GodPlan API for Vercel with GIN...")
+
+	// Load config
+	cfg := config.Load()
+
+	// Debug info untuk DATABASE_URL
+	if cfg.DatabaseURL != "" {
+		log.Println("✅ DATABASE_URL is available")
+		maskedURL := maskPassword(cfg.DatabaseURL)
+		log.Printf("📝 Using DATABASE_URL: %s", maskedURL)
+	} else {
+		log.Println("⚠️ DATABASE_URL not found, using individual DB config")
+		log.Printf("📝 DB Host: %s, Port: %s, User: %s, Name: %s",
+			cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBName)
+	}
 
 	// Initialize database
 	if err := database.InitDB(); err != nil {
@@ -42,11 +57,10 @@ func setupGin() {
 
 	log.Printf("🟡 Registering Gin middleware...")
 
-	// Apply middleware - HANYA middleware yang tersedia
+	// Apply middleware
 	router.Use(gin.Recovery())
 	router.Use(middleware.GinCORS())
 	router.Use(middleware.GinLogging())
-	// DatabaseCheck dihapus karena tidak ada di package middleware
 
 	log.Printf("🟢 Gin middleware registered")
 
@@ -54,7 +68,7 @@ func setupGin() {
 	router.GET("/health", ginHealthCheck)
 	router.GET("/api/v1/health", ginHealthCheck)
 
-	// Swagger routes - FIXED
+	// Swagger routes - FIXED untuk baca file yang benar
 	router.GET("/swagger", ginSwaggerHandler)
 	router.GET("/swagger/*any", ginSwaggerRedirectHandler)
 	router.GET("/swagger.json", ginSwaggerJSONHandler)
@@ -63,7 +77,7 @@ func setupGin() {
 		c.Redirect(http.StatusFound, "/swagger")
 	})
 
-	// API Routes
+	// API Routes - SAMA PERSIS seperti di main.go
 	api := router.Group("/api/v1")
 	{
 		// Public routes - No authentication required
@@ -82,7 +96,7 @@ func setupGin() {
 			protected.POST("/users", ginHandlerWrapper(handlers.CreateUser))
 			protected.GET("/users/:id", ginHandlerWrapper(handlers.GetUser))
 
-			// Profile routes - NEWLY ADDED
+			// Profile routes
 			protected.GET("/profile", handlers.GinGetProfile(userRepo))
 
 			// Task routes
@@ -109,6 +123,16 @@ func setupGin() {
 	})
 
 	log.Printf("✅ GodPlan API with GIN initialized successfully for Vercel")
+	log.Printf("📍 Available endpoints:")
+	log.Printf("   - GET  /health")
+	log.Printf("   - GET  /swagger")
+	log.Printf("   - POST /api/v1/auth/register")
+	log.Printf("   - POST /api/v1/auth/login")
+	log.Printf("   - GET  /api/v1/profile")
+	log.Printf("   - GET  /api/v1/tasks")
+	log.Printf("   - POST /api/v1/tasks")
+	log.Printf("   - POST /api/v1/attendance/clock-in")
+	log.Printf("   - POST /api/v1/attendance/clock-out")
 }
 
 // ginHandlerWrapper converts existing HTTP handlers to Gin handlers
@@ -130,145 +154,56 @@ func ginHealthCheck(c *gin.Context) {
 		platform = "local"
 	}
 
+	cfg := config.Load()
+
 	response := map[string]interface{}{
-		"status":    "ok",
-		"service":   "godplan-backend",
-		"database":  dbStatus,
-		"timestamp": time.Now().Format(time.RFC3339),
-		"platform":  platform,
-		"framework": "gin",
+		"status":       "ok",
+		"service":      "godplan-backend",
+		"database":     dbStatus,
+		"timestamp":    time.Now().Format(time.RFC3339),
+		"platform":     platform,
+		"framework":    "gin",
+		"version":      "1.0.0",
+		"using_db_url": cfg.DatabaseURL != "",
 	}
 
 	c.JSON(http.StatusOK, response)
 }
 
-// ginSwaggerJSONHandler handles swagger.json request
+// ginSwaggerJSONHandler handles swagger.json request - FIXED
 func ginSwaggerJSONHandler(c *gin.Context) {
-	// Try to read the swagger.json file first
+	// Coba baca file swagger.json dari root directory
 	data, err := os.ReadFile("./docs/swagger.json")
 	if err != nil {
-		log.Printf("❌ Failed to read swagger.json: %v", err)
-		// Fallback to embedded swagger spec
-		embeddedSwagger := map[string]interface{}{
-			"openapi": "3.0.0",
-			"info": map[string]interface{}{
-				"title":       "GodPlan API",
-				"version":     "1.0",
-				"description": "Backend API for GodPlan application",
-			},
-			"servers": []map[string]interface{}{
-				{
-					"url":         "https://be-godplan.godjahstudio.com",
-					"description": "Production server",
-				},
-			},
-			"paths": map[string]interface{}{
-				"/api/v1/health": map[string]interface{}{
-					"get": map[string]interface{}{
-						"summary":     "Health Check",
-						"description": "Check API health status",
-						"responses": map[string]interface{}{
-							"200": map[string]interface{}{
-								"description": "OK",
-								"content": map[string]interface{}{
-									"application/json": map[string]interface{}{
-										"schema": map[string]interface{}{
-											"type": "object",
-											"properties": map[string]interface{}{
-												"status":   map[string]interface{}{"type": "string"},
-												"service":  map[string]interface{}{"type": "string"},
-												"database": map[string]interface{}{"type": "string"},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-				"/api/v1/auth/register": map[string]interface{}{
-					"post": map[string]interface{}{
-						"summary": "Register new user",
-						"requestBody": map[string]interface{}{
-							"required": true,
-							"content": map[string]interface{}{
-								"application/json": map[string]interface{}{
-									"schema": map[string]interface{}{
-										"type": "object",
-										"properties": map[string]interface{}{
-											"email":    map[string]interface{}{"type": "string"},
-											"password": map[string]interface{}{"type": "string"},
-											"name":     map[string]interface{}{"type": "string"},
-										},
-									},
-								},
-							},
-						},
-						"responses": map[string]interface{}{
-							"200": map[string]interface{}{
-								"description": "User registered successfully",
-							},
-						},
-					},
-				},
-				"/api/v1/auth/login": map[string]interface{}{
-					"post": map[string]interface{}{
-						"summary": "Login user",
-						"requestBody": map[string]interface{}{
-							"required": true,
-							"content": map[string]interface{}{
-								"application/json": map[string]interface{}{
-									"schema": map[string]interface{}{
-										"type": "object",
-										"properties": map[string]interface{}{
-											"email":    map[string]interface{}{"type": "string"},
-											"password": map[string]interface{}{"type": "string"},
-										},
-									},
-								},
-							},
-						},
-						"responses": map[string]interface{}{
-							"200": map[string]interface{}{
-								"description": "Login successful",
-							},
-						},
-					},
-				},
-			},
-			"components": map[string]interface{}{
-				"securitySchemes": map[string]interface{}{
-					"bearerAuth": map[string]interface{}{
-						"type":         "http",
-						"scheme":       "bearer",
-						"bearerFormat": "JWT",
-					},
-				},
-			},
-			"security": []map[string]interface{}{
-				{
-					"bearerAuth": []string{},
-				},
-			},
+		// Fallback: coba baca dari path relative
+		data, err = os.ReadFile("docs/swagger.json")
+		if err != nil {
+			log.Printf("❌ Failed to read swagger.json: %v", err)
+			// Fallback ke embedded swagger spec yang LENGKAP
+			embeddedSwagger := createEmbeddedSwaggerSpec()
+			c.JSON(200, embeddedSwagger)
+			return
 		}
-		c.JSON(200, embeddedSwagger)
-		return
 	}
 
 	c.Data(200, "application/json", data)
 }
 
-// ginSwaggerYAMLHandler handles swagger.yaml request
+// ginSwaggerYAMLHandler handles swagger.yaml request - FIXED
 func ginSwaggerYAMLHandler(c *gin.Context) {
-	// Try to read the swagger.yaml file first
+	// Coba baca file swagger.yaml dari root directory
 	data, err := os.ReadFile("./docs/swagger.yaml")
 	if err != nil {
-		log.Printf("❌ Failed to read swagger.yaml: %v", err)
-		c.JSON(404, gin.H{
-			"error":   true,
-			"message": "swagger.yaml not found",
-		})
-		return
+		// Fallback: coba baca dari path relative
+		data, err = os.ReadFile("docs/swagger.yaml")
+		if err != nil {
+			log.Printf("❌ Failed to read swagger.yaml: %v", err)
+			c.JSON(404, gin.H{
+				"error":   true,
+				"message": "swagger.yaml not found",
+			})
+			return
+		}
 	}
 
 	c.Data(200, "application/yaml", data)
@@ -374,6 +309,260 @@ func ginSwaggerHandler(c *gin.Context) {
     </script>
 </body>
 </html>`)
+}
+
+// createEmbeddedSwaggerSpec creates a complete swagger spec when file is missing
+func createEmbeddedSwaggerSpec() map[string]interface{} {
+	return map[string]interface{}{
+		"openapi": "3.0.0",
+		"info": map[string]interface{}{
+			"title":       "GodPlan API",
+			"version":     "1.0",
+			"description": "Backend API for GodPlan application - Task Management & Attendance System",
+		},
+		"servers": []map[string]interface{}{
+			{
+				"url":         "https://be-godplan.godjahstudio.com",
+				"description": "Production server",
+			},
+		},
+		"paths": map[string]interface{}{
+			"/api/v1/health": map[string]interface{}{
+				"get": map[string]interface{}{
+					"summary":     "Health Check",
+					"description": "Check API health status",
+					"tags":        []string{"health"},
+					"responses": map[string]interface{}{
+						"200": map[string]interface{}{
+							"description": "OK",
+							"content": map[string]interface{}{
+								"application/json": map[string]interface{}{
+									"schema": map[string]interface{}{
+										"type": "object",
+										"properties": map[string]interface{}{
+											"status":   map[string]interface{}{"type": "string"},
+											"service":  map[string]interface{}{"type": "string"},
+											"database": map[string]interface{}{"type": "string"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			"/api/v1/auth/register": map[string]interface{}{
+				"post": map[string]interface{}{
+					"summary":     "Register new user",
+					"description": "Register a new user account",
+					"tags":        []string{"authentication"},
+					"requestBody": map[string]interface{}{
+						"required": true,
+						"content": map[string]interface{}{
+							"application/json": map[string]interface{}{
+								"schema": map[string]interface{}{
+									"type": "object",
+									"properties": map[string]interface{}{
+										"email":    map[string]interface{}{"type": "string", "example": "user@example.com"},
+										"password": map[string]interface{}{"type": "string", "example": "password123"},
+										"name":     map[string]interface{}{"type": "string", "example": "John Doe"},
+									},
+								},
+							},
+						},
+					},
+					"responses": map[string]interface{}{
+						"200": map[string]interface{}{
+							"description": "User registered successfully",
+						},
+					},
+				},
+			},
+			"/api/v1/auth/login": map[string]interface{}{
+				"post": map[string]interface{}{
+					"summary":     "Login user",
+					"description": "Authenticate user and return JWT token",
+					"tags":        []string{"authentication"},
+					"requestBody": map[string]interface{}{
+						"required": true,
+						"content": map[string]interface{}{
+							"application/json": map[string]interface{}{
+								"schema": map[string]interface{}{
+									"type": "object",
+									"properties": map[string]interface{}{
+										"email":    map[string]interface{}{"type": "string", "example": "user@example.com"},
+										"password": map[string]interface{}{"type": "string", "example": "password123"},
+									},
+								},
+							},
+						},
+					},
+					"responses": map[string]interface{}{
+						"200": map[string]interface{}{
+							"description": "Login successful",
+						},
+					},
+				},
+			},
+			"/api/v1/profile": map[string]interface{}{
+				"get": map[string]interface{}{
+					"summary":     "Get user profile",
+					"description": "Get current user profile information",
+					"tags":        []string{"profile"},
+					"security": []map[string]interface{}{
+						{"bearerAuth": []string{}},
+					},
+					"responses": map[string]interface{}{
+						"200": map[string]interface{}{
+							"description": "Profile retrieved successfully",
+						},
+					},
+				},
+			},
+			"/api/v1/tasks": map[string]interface{}{
+				"get": map[string]interface{}{
+					"summary":     "Get all tasks",
+					"description": "Get list of tasks for the current user",
+					"tags":        []string{"tasks"},
+					"security": []map[string]interface{}{
+						{"bearerAuth": []string{}},
+					},
+					"responses": map[string]interface{}{
+						"200": map[string]interface{}{
+							"description": "Tasks retrieved successfully",
+						},
+					},
+				},
+				"post": map[string]interface{}{
+					"summary":     "Create new task",
+					"description": "Create a new task for the current user",
+					"tags":        []string{"tasks"},
+					"security": []map[string]interface{}{
+						{"bearerAuth": []string{}},
+					},
+					"requestBody": map[string]interface{}{
+						"required": true,
+						"content": map[string]interface{}{
+							"application/json": map[string]interface{}{
+								"schema": map[string]interface{}{
+									"type": "object",
+									"properties": map[string]interface{}{
+										"title":       map[string]interface{}{"type": "string"},
+										"description": map[string]interface{}{"type": "string"},
+										"due_date":    map[string]interface{}{"type": "string", "format": "date-time"},
+									},
+								},
+							},
+						},
+					},
+					"responses": map[string]interface{}{
+						"200": map[string]interface{}{
+							"description": "Task created successfully",
+						},
+					},
+				},
+			},
+			"/api/v1/attendance/clock-in": map[string]interface{}{
+				"post": map[string]interface{}{
+					"summary":     "Clock in",
+					"description": "Record employee clock-in with location check",
+					"tags":        []string{"attendance"},
+					"security": []map[string]interface{}{
+						{"bearerAuth": []string{}},
+					},
+					"requestBody": map[string]interface{}{
+						"required": true,
+						"content": map[string]interface{}{
+							"application/json": map[string]interface{}{
+								"schema": map[string]interface{}{
+									"type": "object",
+									"properties": map[string]interface{}{
+										"latitude":  map[string]interface{}{"type": "number", "format": "float"},
+										"longitude": map[string]interface{}{"type": "number", "format": "float"},
+									},
+								},
+							},
+						},
+					},
+					"responses": map[string]interface{}{
+						"200": map[string]interface{}{
+							"description": "Clock-in recorded successfully",
+						},
+					},
+				},
+			},
+			"/api/v1/attendance/clock-out": map[string]interface{}{
+				"post": map[string]interface{}{
+					"summary":     "Clock out",
+					"description": "Record employee clock-out",
+					"tags":        []string{"attendance"},
+					"security": []map[string]interface{}{
+						{"bearerAuth": []string{}},
+					},
+					"responses": map[string]interface{}{
+						"200": map[string]interface{}{
+							"description": "Clock-out recorded successfully",
+						},
+					},
+				},
+			},
+		},
+		"components": map[string]interface{}{
+			"securitySchemes": map[string]interface{}{
+				"bearerAuth": map[string]interface{}{
+					"type":         "http",
+					"scheme":       "bearer",
+					"bearerFormat": "JWT",
+				},
+			},
+		},
+		"security": []map[string]interface{}{
+			{
+				"bearerAuth": []string{},
+			},
+		},
+	}
+}
+
+// Helper functions untuk mask password
+func maskPassword(connStr string) string {
+	// Mask password dalam connection string
+	for _, prefix := range []string{"password=", "Password="} {
+		if idx := findIndex(connStr, prefix); idx != -1 {
+			end := findNextSeparator(connStr, idx+len(prefix))
+			return connStr[:idx+len(prefix)] + "****" + connStr[end:]
+		}
+	}
+
+	// Mask password dalam URL format (postgres://user:pass@host)
+	if idx := findIndex(connStr, "://"); idx != -1 {
+		if idx2 := findIndex(connStr[idx+3:], "@"); idx2 != -1 {
+			start := idx + 3
+			end := start + idx2
+			if colonIdx := findIndex(connStr[start:end], ":"); colonIdx != -1 {
+				return connStr[:start+colonIdx+1] + "****" + connStr[end:]
+			}
+		}
+	}
+	return connStr
+}
+
+func findIndex(s, substr string) int {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return i
+		}
+	}
+	return -1
+}
+
+func findNextSeparator(s string, start int) int {
+	for i := start; i < len(s); i++ {
+		if s[i] == ' ' || s[i] == '&' || s[i] == '?' || s[i] == '#' {
+			return i
+		}
+	}
+	return len(s)
 }
 
 // Handler function untuk Vercel
