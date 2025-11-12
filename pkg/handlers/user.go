@@ -102,7 +102,7 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user.ID = id
+	id = int(user.ID)
 	user.Password = "" // Clear password from response
 
 	if config.IsDevelopment() {

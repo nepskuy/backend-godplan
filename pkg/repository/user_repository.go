@@ -12,6 +12,7 @@ type UserRepositoryInterface interface {
 	CreateUser(user *models.User) error
 	FindByEmail(email string) (*models.User, error)
 	FindByID(id int) (*models.User, error)
+	GetUserByID(userID int64) (*models.User, error)
 }
 
 type UserRepository struct {
@@ -36,7 +37,15 @@ func (r *UserRepository) CreateUser(user *models.User) error {
 func (r *UserRepository) FindByEmail(email string) (*models.User, error) {
 	user := &models.User{}
 	query := `SELECT id, username, name, email, password, role, created_at FROM users WHERE email = $1`
-	err := r.db.QueryRow(query, email).Scan(&user.ID, &user.Username, &user.Name, &user.Email, &user.Password, &user.Role, &user.CreatedAt)
+	err := r.db.QueryRow(query, email).Scan(
+		&user.ID,
+		&user.Username,
+		&user.Name,
+		&user.Email,
+		&user.Password,
+		&user.Role,
+		&user.CreatedAt,
+	)
 
 	if err == sql.ErrNoRows {
 		return nil, utils.ErrUserNotFound
@@ -50,7 +59,58 @@ func (r *UserRepository) FindByEmail(email string) (*models.User, error) {
 func (r *UserRepository) FindByID(id int) (*models.User, error) {
 	user := &models.User{}
 	query := `SELECT id, username, name, email, role, created_at FROM users WHERE id = $1`
-	err := r.db.QueryRow(query, id).Scan(&user.ID, &user.Username, &user.Name, &user.Email, &user.Role, &user.CreatedAt)
+	err := r.db.QueryRow(query, id).Scan(
+		&user.ID,
+		&user.Username,
+		&user.Name,
+		&user.Email,
+		&user.Role,
+		&user.CreatedAt,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, utils.ErrUserNotFound
+	}
+	if err != nil {
+		return nil, utils.ErrInternalServer
+	}
+	return user, nil
+}
+
+func (r *UserRepository) GetUserByID(userID int64) (*models.User, error) {
+	user := &models.User{}
+
+	query := `
+		SELECT 
+			id, username, name, email, 
+			COALESCE(employee_id, '') as employee_id,
+			COALESCE(nisn, '') as nisn, 
+			COALESCE(department, '') as department,
+			COALESCE(position, '') as position,
+			COALESCE(status, '') as status,
+			COALESCE(phone, '') as phone,
+			role, 
+			created_at, 
+			COALESCE(updated_at, created_at) as updated_at
+		FROM users 
+		WHERE id = $1
+	`
+
+	err := r.db.QueryRow(query, userID).Scan(
+		&user.ID,
+		&user.Username,
+		&user.Name,
+		&user.Email,
+		&user.EmployeeID,
+		&user.NISN,
+		&user.Department,
+		&user.Position,
+		&user.Status,
+		&user.Phone,
+		&user.Role,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	)
 
 	if err == sql.ErrNoRows {
 		return nil, utils.ErrUserNotFound

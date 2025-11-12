@@ -7,13 +7,13 @@ import (
 	"os"
 	"time"
 
-	"github.com/gorilla/mux"
+	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"github.com/nepskuy/be-godplan/pkg/config"
 	"github.com/nepskuy/be-godplan/pkg/database"
 	"github.com/nepskuy/be-godplan/pkg/handlers"
 	"github.com/nepskuy/be-godplan/pkg/middleware"
-	"github.com/nepskuy/be-godplan/pkg/utils"
+	"github.com/nepskuy/be-godplan/pkg/repository"
 )
 
 // @title GodPlan API
@@ -22,7 +22,7 @@ import (
 // @host localhost:8080
 // @BasePath /api/v1
 func main() {
-	log.Println("🚀 Starting GodPlan Backend Server...")
+	log.Println("🚀 Starting GodPlan Backend Server with GIN...")
 
 	// Load .env file hanya di development
 	if config.IsDevelopment() {
@@ -59,7 +59,12 @@ func main() {
 		log.Println("✅ Database health check passed")
 	}
 
-	router := setupRouter()
+	// Setup repository
+	db := database.GetDB()
+	userRepo := repository.NewUserRepository(db)
+
+	// Setup Gin router
+	router := setupGinRouter(userRepo)
 
 	port := cfg.ServerPort
 	if port == "" {
@@ -93,85 +98,100 @@ func main() {
 	}
 }
 
-func setupRouter() *mux.Router {
-	router := mux.NewRouter()
-	router.StrictSlash(true)
+func setupGinRouter(userRepo *repository.UserRepository) *gin.Engine {
+	// Set Gin mode
+	if config.IsProduction() {
+		gin.SetMode(gin.ReleaseMode)
+	}
 
-	log.Println("🔧 Setting up middleware...")
+	router := gin.Default()
 
-	router.Use(middleware.CORS)
-	router.Use(middleware.Logging)
-	router.Use(middleware.DatabaseCheck)
-	router.Use(middleware.Recovery)
+	log.Println("🔧 Setting up Gin middleware...")
 
-	log.Println("✅ Middleware registered")
+	// Apply middleware
+	router.Use(middleware.GinCORS())
+	router.Use(middleware.GinLogging())
+	router.Use(middleware.GinRecovery())
 
-	// Global OPTIONS handler
-	router.Methods(http.MethodOptions).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})
+	log.Println("✅ Gin middleware registered")
 
 	log.Println("🔧 Setting up routes...")
 
-	router.HandleFunc("/health", healthCheck).Methods("GET", "OPTIONS")
-	router.HandleFunc("/api/v1/health", healthCheck).Methods("GET", "OPTIONS")
+	// Health check routes
+	router.GET("/health", ginHealthCheck)
+	router.GET("/api/v1/health", ginHealthCheck)
 
-	// Serve Swagger JSON
-	router.HandleFunc("/swagger.json", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "./docs/swagger.json")
-	}).Methods("GET")
-
-	// Serve Swagger YAML (alternatif)
-	router.HandleFunc("/swagger.yaml", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "./docs/swagger.yaml")
-	}).Methods("GET")
-
-	// Swagger UI handler
-	router.HandleFunc("/swagger", swaggerHandler).Methods("GET")
-	router.HandleFunc("/swagger/", swaggerHandler).Methods("GET")
-
-	// Root redirect to Swagger
-	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/swagger", http.StatusFound)
-	}).Methods("GET")
-
-	// Static files untuk Swagger UI assets (jika diperlukan)
-	router.PathPrefix("/swagger/static/").Handler(http.StripPrefix("/swagger/static/",
-		http.FileServer(http.Dir("./docs/"))))
-
-	publicAPI := router.PathPrefix("/api/v1").Subrouter()
-	publicAPI.HandleFunc("/auth/register", handlers.Register).Methods("POST", "OPTIONS")
-	publicAPI.HandleFunc("/auth/login", handlers.Login).Methods("POST", "OPTIONS")
-
-	protectedAPI := router.PathPrefix("/api/v1").Subrouter()
-	protectedAPI.Use(middleware.AuthMiddleware)
-
-	protectedAPI.HandleFunc("/users", handlers.GetUsers).Methods("GET")
-	protectedAPI.HandleFunc("/users", handlers.CreateUser).Methods("POST")
-	protectedAPI.HandleFunc("/users/{id}", handlers.GetUser).Methods("GET")
-
-	protectedAPI.HandleFunc("/tasks", handlers.GetTasks).Methods("GET")
-	protectedAPI.HandleFunc("/tasks", handlers.CreateTask).Methods("POST")
-	protectedAPI.HandleFunc("/tasks/{id}", handlers.GetTask).Methods("GET")
-	protectedAPI.HandleFunc("/tasks/{id}", handlers.UpdateTask).Methods("PUT")
-	protectedAPI.HandleFunc("/tasks/{id}", handlers.DeleteTask).Methods("DELETE")
-
-	// Gunakan HTTP handlers untuk attendance (bukan Gin handlers)
-	protectedAPI.HandleFunc("/attendance/clock-in", handlers.ClockInHTTP).Methods("POST")
-	protectedAPI.HandleFunc("/attendance/clock-out", handlers.ClockOutHTTP).Methods("POST")
-	protectedAPI.HandleFunc("/attendance/check-location", handlers.CheckLocationHTTP).Methods("POST")
-	protectedAPI.HandleFunc("/attendance", handlers.GetAttendanceHTTP).Methods("GET")
-
-	router.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		utils.ErrorResponse(w, http.StatusNotFound, "Route not found: "+r.URL.Path)
+	// Swagger routes
+	router.GET("/swagger", ginSwaggerHandler)
+	router.GET("/swagger.json", func(c *gin.Context) {
+		c.File("./docs/swagger.json")
+	})
+	router.GET("/swagger.yaml", func(c *gin.Context) {
+		c.File("./docs/swagger.yaml")
 	})
 
-	log.Println("✅ Routes registered successfully")
+	// Root redirect to Swagger
+	router.GET("/", func(c *gin.Context) {
+		c.Redirect(http.StatusFound, "/swagger")
+	})
 
+	// API Routes
+	api := router.Group("/api/v1")
+	{
+		// Public routes - No authentication required
+		public := api.Group("/auth")
+		{
+			public.POST("/register", ginAuthWrapper(handlers.Register))
+			public.POST("/login", ginAuthWrapper(handlers.Login))
+		}
+
+		// Protected routes - Authentication required
+		protected := api.Group("")
+		protected.Use(middleware.GinAuthMiddleware())
+		{
+			// User routes
+			protected.GET("/users", ginAuthWrapper(handlers.GetUsers))
+			protected.POST("/users", ginAuthWrapper(handlers.CreateUser))
+			protected.GET("/users/:id", ginAuthWrapper(handlers.GetUser))
+
+			// Profile routes - NEW
+			protected.GET("/profile", handlers.GinGetProfile(userRepo))
+
+			// Task routes
+			protected.GET("/tasks", ginAuthWrapper(handlers.GetTasks))
+			protected.POST("/tasks", ginAuthWrapper(handlers.CreateTask))
+			protected.GET("/tasks/:id", ginAuthWrapper(handlers.GetTask))
+			protected.PUT("/tasks/:id", ginAuthWrapper(handlers.UpdateTask))
+			protected.DELETE("/tasks/:id", ginAuthWrapper(handlers.DeleteTask))
+
+			// Attendance routes
+			protected.POST("/attendance/clock-in", ginAuthWrapper(handlers.ClockInHTTP))
+			protected.POST("/attendance/clock-out", ginAuthWrapper(handlers.ClockOutHTTP))
+			protected.POST("/attendance/check-location", ginAuthWrapper(handlers.CheckLocationHTTP))
+			protected.GET("/attendance", ginAuthWrapper(handlers.GetAttendanceHTTP))
+		}
+	}
+
+	// 404 handler
+	router.NoRoute(func(c *gin.Context) {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Route not found: " + c.Request.URL.Path,
+		})
+	})
+
+	log.Println("✅ Gin routes registered successfully")
 	return router
 }
 
-func healthCheck(w http.ResponseWriter, r *http.Request) {
+// ginAuthWrapper converts existing HTTP handlers to Gin handlers
+func ginAuthWrapper(handler http.HandlerFunc) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Convert Gin context to HTTP request
+		handler(c.Writer, c.Request)
+	}
+}
+
+func ginHealthCheck(c *gin.Context) {
 	dbStatus := "connected"
 	if err := database.HealthCheck(); err != nil {
 		dbStatus = "disconnected"
@@ -185,7 +205,7 @@ func healthCheck(w http.ResponseWriter, r *http.Request) {
 
 	cfg := config.Load()
 
-	utils.SuccessResponse(w, http.StatusOK, "Server is healthy", map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"status":       "ok",
 		"service":      "godplan-backend",
 		"database":     dbStatus,
@@ -196,10 +216,9 @@ func healthCheck(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func swaggerHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html")
-	html := `
-<!DOCTYPE html>
+func ginSwaggerHandler(c *gin.Context) {
+	c.Header("Content-Type", "text/html")
+	c.String(http.StatusOK, `<!DOCTYPE html>
 <html>
 <head>
     <title>GodPlan API Documentation</title>
@@ -252,7 +271,6 @@ func swaggerHandler(w http.ResponseWriter, r *http.Request) {
                 docExpansion: "none"
             });
             
-            // Handle jika swagger.json tidak ditemukan
             fetch('/swagger.json')
                 .then(response => {
                     if (!response.ok) {
@@ -271,9 +289,7 @@ func swaggerHandler(w http.ResponseWriter, r *http.Request) {
         }
     </script>
 </body>
-</html>
-	`
-	w.Write([]byte(html))
+</html>`)
 }
 
 func maskPassword(connStr string) string {
