@@ -30,13 +30,6 @@ definitions:
         example: base64_encoded_image
         type: string
     type: object
-  handlers.ErrorResponse:
-    properties:
-      error:
-        type: string
-      success:
-        type: boolean
-    type: object
   handlers.LocationCheckRequest:
     properties:
       latitude:
@@ -57,22 +50,42 @@ definitions:
     type: object
   handlers.RegisterRequest:
     properties:
+      department:
+        example: IT
+        type: string
       email:
         example: john@example.com
+        type: string
+      employee_id:
+        example: EMP001
         type: string
       name:
         example: John Doe
         type: string
+      nisn:
+        example: "123456789"
+        type: string
       password:
         example: password123
+        type: string
+      phone:
+        example: "+628123456789"
+        type: string
+      position:
+        example: Developer
+        type: string
+      status:
+        example: active
         type: string
       username:
         example: johndoe
         type: string
     type: object
-  handlers.SuccessResponse:
+  utils.GinResponse:
     properties:
       data: {}
+      error:
+        type: string
       message:
         type: string
       success:
@@ -81,7 +94,7 @@ definitions:
 host: localhost:8080
 info:
   contact: {}
-  description: Attendance Management System API
+  description: Backend API for GodPlan application
   title: GodPlan API
   version: "1.0"
 paths:
@@ -105,19 +118,19 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/handlers.SuccessResponse'
+            $ref: '#/definitions/utils.GinResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/handlers.ErrorResponse'
+            $ref: '#/definitions/utils.GinResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/handlers.ErrorResponse'
+            $ref: '#/definitions/utils.GinResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/handlers.ErrorResponse'
+            $ref: '#/definitions/utils.GinResponse'
       security:
       - BearerAuth: []
       summary: Get attendance history
@@ -141,11 +154,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/handlers.SuccessResponse'
+            $ref: '#/definitions/utils.GinResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/handlers.ErrorResponse'
+            $ref: '#/definitions/utils.GinResponse'
       security:
       - BearerAuth: []
       summary: Check location validity
@@ -169,19 +182,19 @@ paths:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/handlers.SuccessResponse'
+            $ref: '#/definitions/utils.GinResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/handlers.ErrorResponse'
+            $ref: '#/definitions/utils.GinResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/handlers.ErrorResponse'
+            $ref: '#/definitions/utils.GinResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/handlers.ErrorResponse'
+            $ref: '#/definitions/utils.GinResponse'
       security:
       - BearerAuth: []
       summary: Clock in attendance
@@ -205,19 +218,19 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/handlers.SuccessResponse'
+            $ref: '#/definitions/utils.GinResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/handlers.ErrorResponse'
+            $ref: '#/definitions/utils.GinResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/handlers.ErrorResponse'
+            $ref: '#/definitions/utils.GinResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/handlers.ErrorResponse'
+            $ref: '#/definitions/utils.GinResponse'
       security:
       - BearerAuth: []
       summary: Clock out attendance
@@ -241,15 +254,18 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/handlers.SuccessResponse'
+            additionalProperties: true
+            type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/handlers.ErrorResponse'
+            additionalProperties: true
+            type: object
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/handlers.ErrorResponse'
+            additionalProperties: true
+            type: object
       summary: User login
       tags:
       - auth
@@ -257,7 +273,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: Create a new user account
+      description: Create a new user account with complete profile data
       parameters:
       - description: User registration data
         in: body
@@ -271,21 +287,19 @@ paths:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/handlers.SuccessResponse'
+            additionalProperties: true
+            type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/handlers.ErrorResponse'
+            additionalProperties: true
+            type: object
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/handlers.ErrorResponse'
+            additionalProperties: true
+            type: object
       summary: Register a new user
       tags:
       - auth
-securityDefinitions:
-  BearerAuth:
-    in: header
-    name: Authorization
-    type: apiKey
 swagger: "2.0"

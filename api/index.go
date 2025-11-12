@@ -54,18 +54,11 @@ func setupGin() {
 	router.GET("/health", ginHealthCheck)
 	router.GET("/api/v1/health", ginHealthCheck)
 
-	// Swagger routes
+	// Swagger routes - FIXED
 	router.GET("/swagger", ginSwaggerHandler)
-	router.GET("/swagger.json", func(c *gin.Context) {
-		// Fallback jika file tidak ada
-		c.JSON(200, gin.H{
-			"info": map[string]interface{}{
-				"title":   "GodPlan API",
-				"version": "1.0",
-			},
-			"openapi": "3.0.0",
-		})
-	})
+	router.GET("/swagger/*any", ginSwaggerRedirectHandler)
+	router.GET("/swagger.json", ginSwaggerJSONHandler)
+	router.GET("/swagger.yaml", ginSwaggerYAMLHandler)
 	router.GET("/", func(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/swagger")
 	})
@@ -149,26 +142,202 @@ func ginHealthCheck(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
+// ginSwaggerJSONHandler handles swagger.json request
+func ginSwaggerJSONHandler(c *gin.Context) {
+	// Try to read the swagger.json file first
+	data, err := os.ReadFile("./docs/swagger.json")
+	if err != nil {
+		log.Printf("❌ Failed to read swagger.json: %v", err)
+		// Fallback to embedded swagger spec
+		embeddedSwagger := map[string]interface{}{
+			"openapi": "3.0.0",
+			"info": map[string]interface{}{
+				"title":       "GodPlan API",
+				"version":     "1.0",
+				"description": "Backend API for GodPlan application",
+			},
+			"servers": []map[string]interface{}{
+				{
+					"url":         "https://be-godplan.godjahstudio.com",
+					"description": "Production server",
+				},
+			},
+			"paths": map[string]interface{}{
+				"/api/v1/health": map[string]interface{}{
+					"get": map[string]interface{}{
+						"summary":     "Health Check",
+						"description": "Check API health status",
+						"responses": map[string]interface{}{
+							"200": map[string]interface{}{
+								"description": "OK",
+								"content": map[string]interface{}{
+									"application/json": map[string]interface{}{
+										"schema": map[string]interface{}{
+											"type": "object",
+											"properties": map[string]interface{}{
+												"status":   map[string]interface{}{"type": "string"},
+												"service":  map[string]interface{}{"type": "string"},
+												"database": map[string]interface{}{"type": "string"},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				"/api/v1/auth/register": map[string]interface{}{
+					"post": map[string]interface{}{
+						"summary": "Register new user",
+						"requestBody": map[string]interface{}{
+							"required": true,
+							"content": map[string]interface{}{
+								"application/json": map[string]interface{}{
+									"schema": map[string]interface{}{
+										"type": "object",
+										"properties": map[string]interface{}{
+											"email":    map[string]interface{}{"type": "string"},
+											"password": map[string]interface{}{"type": "string"},
+											"name":     map[string]interface{}{"type": "string"},
+										},
+									},
+								},
+							},
+						},
+						"responses": map[string]interface{}{
+							"200": map[string]interface{}{
+								"description": "User registered successfully",
+							},
+						},
+					},
+				},
+				// Add more paths as needed
+			},
+			"components": map[string]interface{}{
+				"securitySchemes": map[string]interface{}{
+					"bearerAuth": map[string]interface{}{
+						"type":         "http",
+						"scheme":       "bearer",
+						"bearerFormat": "JWT",
+					},
+				},
+			},
+			"security": []map[string]interface{}{
+				{
+					"bearerAuth": []string{},
+				},
+			},
+		}
+		c.JSON(200, embeddedSwagger)
+		return
+	}
+
+	c.Data(200, "application/json", data)
+}
+
+// ginSwaggerYAMLHandler handles swagger.yaml request
+func ginSwaggerYAMLHandler(c *gin.Context) {
+	// Try to read the swagger.yaml file first
+	data, err := os.ReadFile("./docs/swagger.yaml")
+	if err != nil {
+		log.Printf("❌ Failed to read swagger.yaml: %v", err)
+		c.JSON(404, gin.H{
+			"error":   true,
+			"message": "swagger.yaml not found",
+		})
+		return
+	}
+
+	c.Data(200, "application/yaml", data)
+}
+
+// ginSwaggerRedirectHandler handles other Swagger UI routes
+func ginSwaggerRedirectHandler(c *gin.Context) {
+	c.Redirect(http.StatusFound, "/swagger")
+}
+
 func ginSwaggerHandler(c *gin.Context) {
 	c.Header("Content-Type", "text/html")
 	c.String(http.StatusOK, `<!DOCTYPE html>
 <html>
 <head>
     <title>GodPlan API Documentation</title>
-    <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@3/swagger-ui.css">
+    <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5.9.0/swagger-ui.css">
+    <link rel="icon" type="image/png" href="https://unpkg.com/swagger-ui-dist@5.9.0/favicon-32x32.png" sizes="32x32" />
+    <link rel="icon" type="image/png" href="https://unpkg.com/swagger-ui-dist@5.9.0/favicon-16x16.png" sizes="16x16" />
+    <style>
+        html {
+            box-sizing: border-box;
+            overflow: -moz-scrollbars-vertical;
+            overflow-y: scroll;
+        }
+        *,
+        *:before,
+        *:after {
+            box-sizing: inherit;
+        }
+        body {
+            margin: 0;
+            background: #fafafa;
+        }
+        .swagger-ui .topbar {
+            background-color: #2c3e50;
+            padding: 10px 0;
+        }
+        .swagger-ui .info hgroup.main {
+            text-align: center;
+        }
+    </style>
 </head>
 <body>
     <div id="swagger-ui"></div>
-    <script src="https://unpkg.com/swagger-ui-dist@3/swagger-ui-bundle.js"></script>
+    <script src="https://unpkg.com/swagger-ui-dist@5.9.0/swagger-ui-bundle.js"></script>
+    <script src="https://unpkg.com/swagger-ui-dist@5.9.0/swagger-ui-standalone-preset.js"></script>
     <script>
-        SwaggerUIBundle({
-            url: '/swagger.json',
-            dom_id: '#swagger-ui',
-            presets: [
-                SwaggerUIBundle.presets.apis,
-                SwaggerUIBundle.presets.standalone
-            ]
-        });
+        window.onload = function() {
+            const ui = SwaggerUIBundle({
+                url: '/swagger.json',
+                dom_id: '#swagger-ui',
+                deepLinking: true,
+                presets: [
+                    SwaggerUIBundle.presets.apis,
+                    SwaggerUIBundle.presets.standalone
+                ],
+                plugins: [
+                    SwaggerUIBundle.plugins.DownloadUrl
+                ],
+                layout: "StandaloneLayout",
+                validatorUrl: null,
+                defaultModelsExpandDepth: -1,
+                operationsSorter: "alpha",
+                tagsSorter: "alpha",
+                docExpansion: "none",
+                onComplete: function() {
+                    console.log('Swagger UI loaded successfully');
+                }
+            });
+            
+            // Error handling for Swagger JSON
+            fetch('/swagger.json')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to load Swagger JSON: ' + response.status);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('Swagger JSON loaded successfully', data);
+                })
+                .catch(error => {
+                    console.error('Error loading Swagger JSON:', error);
+                    document.getElementById('swagger-ui').innerHTML = 
+                        '<div style="padding: 20px; text-align: center;">' +
+                        '<h2>GodPlan API Documentation</h2>' +
+                        '<p>Basic API documentation is loaded. For full Swagger documentation, generate swagger.json file.</p>' +
+                        '<p><strong>Error:</strong> ' + error.message + '</p>' +
+                        '</div>';
+                });
+        }
     </script>
 </body>
 </html>`)
