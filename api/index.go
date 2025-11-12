@@ -318,7 +318,7 @@ func createEmbeddedSwaggerSpec() map[string]interface{} {
 		"info": map[string]interface{}{
 			"title":       "GodPlan API",
 			"version":     "1.0",
-			"description": "Backend API for GodPlan application - Task Management & Attendance System",
+			"description": "Backend API for GodPlan application - HR Management System",
 		},
 		"servers": []map[string]interface{}{
 			{
@@ -354,26 +354,65 @@ func createEmbeddedSwaggerSpec() map[string]interface{} {
 			"/api/v1/auth/register": map[string]interface{}{
 				"post": map[string]interface{}{
 					"summary":     "Register new user",
-					"description": "Register a new user account",
+					"description": "Register a new user account with complete profile data",
 					"tags":        []string{"authentication"},
 					"requestBody": map[string]interface{}{
 						"required": true,
 						"content": map[string]interface{}{
 							"application/json": map[string]interface{}{
 								"schema": map[string]interface{}{
-									"type": "object",
+									"type":     "object",
+									"required": []string{"username", "full_name", "email", "password"},
 									"properties": map[string]interface{}{
-										"email":    map[string]interface{}{"type": "string", "example": "user@example.com"},
-										"password": map[string]interface{}{"type": "string", "example": "password123"},
-										"name":     map[string]interface{}{"type": "string", "example": "John Doe"},
+										"username":  map[string]interface{}{"type": "string", "example": "johndoe"},
+										"full_name": map[string]interface{}{"type": "string", "example": "John Doe"},
+										"email":     map[string]interface{}{"type": "string", "example": "john@example.com"},
+										"password":  map[string]interface{}{"type": "string", "example": "password123"},
+										"phone":     map[string]interface{}{"type": "string", "example": "+628123456789"},
+										"role":      map[string]interface{}{"type": "string", "example": "employee"},
 									},
 								},
 							},
 						},
 					},
 					"responses": map[string]interface{}{
-						"200": map[string]interface{}{
+						"201": map[string]interface{}{
 							"description": "User registered successfully",
+							"content": map[string]interface{}{
+								"application/json": map[string]interface{}{
+									"schema": map[string]interface{}{
+										"type": "object",
+										"properties": map[string]interface{}{
+											"success": map[string]interface{}{"type": "boolean"},
+											"message": map[string]interface{}{"type": "string"},
+											"data": map[string]interface{}{
+												"type": "object",
+												"properties": map[string]interface{}{
+													"token": map[string]interface{}{"type": "string"},
+													"user": map[string]interface{}{
+														"type": "object",
+														"properties": map[string]interface{}{
+															"id":        map[string]interface{}{"type": "integer"},
+															"username":  map[string]interface{}{"type": "string"},
+															"email":     map[string]interface{}{"type": "string"},
+															"role":      map[string]interface{}{"type": "string"},
+															"full_name": map[string]interface{}{"type": "string"},
+															"phone":     map[string]interface{}{"type": "string"},
+															"is_active": map[string]interface{}{"type": "boolean"},
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						"400": map[string]interface{}{
+							"description": "Bad Request",
+						},
+						"500": map[string]interface{}{
+							"description": "Internal Server Error",
 						},
 					},
 				},
@@ -388,10 +427,11 @@ func createEmbeddedSwaggerSpec() map[string]interface{} {
 						"content": map[string]interface{}{
 							"application/json": map[string]interface{}{
 								"schema": map[string]interface{}{
-									"type": "object",
+									"type":     "object",
+									"required": []string{"email", "password"},
 									"properties": map[string]interface{}{
-										"email":    map[string]interface{}{"type": "string", "example": "user@example.com"},
-										"password": map[string]interface{}{"type": "string", "example": "password123"},
+										"email":    map[string]interface{}{"type": "string", "example": "admin@godplan.com"},
+										"password": map[string]interface{}{"type": "string", "example": "password"},
 									},
 								},
 							},
@@ -400,6 +440,41 @@ func createEmbeddedSwaggerSpec() map[string]interface{} {
 					"responses": map[string]interface{}{
 						"200": map[string]interface{}{
 							"description": "Login successful",
+							"content": map[string]interface{}{
+								"application/json": map[string]interface{}{
+									"schema": map[string]interface{}{
+										"type": "object",
+										"properties": map[string]interface{}{
+											"success": map[string]interface{}{"type": "boolean"},
+											"message": map[string]interface{}{"type": "string"},
+											"data": map[string]interface{}{
+												"type": "object",
+												"properties": map[string]interface{}{
+													"token": map[string]interface{}{"type": "string"},
+													"user": map[string]interface{}{
+														"type": "object",
+														"properties": map[string]interface{}{
+															"id":        map[string]interface{}{"type": "integer"},
+															"username":  map[string]interface{}{"type": "string"},
+															"email":     map[string]interface{}{"type": "string"},
+															"role":      map[string]interface{}{"type": "string"},
+															"full_name": map[string]interface{}{"type": "string"},
+															"phone":     map[string]interface{}{"type": "string"},
+															"is_active": map[string]interface{}{"type": "boolean"},
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						"400": map[string]interface{}{
+							"description": "Bad Request",
+						},
+						"401": map[string]interface{}{
+							"description": "Unauthorized",
 						},
 					},
 				},
@@ -415,6 +490,53 @@ func createEmbeddedSwaggerSpec() map[string]interface{} {
 					"responses": map[string]interface{}{
 						"200": map[string]interface{}{
 							"description": "Profile retrieved successfully",
+						},
+					},
+				},
+			},
+			"/api/v1/users": map[string]interface{}{
+				"get": map[string]interface{}{
+					"summary":     "Get all users",
+					"description": "Get list of all users (admin only)",
+					"tags":        []string{"users"},
+					"security": []map[string]interface{}{
+						{"bearerAuth": []string{}},
+					},
+					"responses": map[string]interface{}{
+						"200": map[string]interface{}{
+							"description": "Users retrieved successfully",
+						},
+					},
+				},
+				"post": map[string]interface{}{
+					"summary":     "Create new user",
+					"description": "Create a new user (admin only)",
+					"tags":        []string{"users"},
+					"security": []map[string]interface{}{
+						{"bearerAuth": []string{}},
+					},
+					"requestBody": map[string]interface{}{
+						"required": true,
+						"content": map[string]interface{}{
+							"application/json": map[string]interface{}{
+								"schema": map[string]interface{}{
+									"type":     "object",
+									"required": []string{"username", "full_name", "email", "password"},
+									"properties": map[string]interface{}{
+										"username":  map[string]interface{}{"type": "string", "example": "johndoe"},
+										"full_name": map[string]interface{}{"type": "string", "example": "John Doe"},
+										"email":     map[string]interface{}{"type": "string", "example": "john@example.com"},
+										"password":  map[string]interface{}{"type": "string", "example": "password123"},
+										"phone":     map[string]interface{}{"type": "string", "example": "+628123456789"},
+										"role":      map[string]interface{}{"type": "string", "example": "employee"},
+									},
+								},
+							},
+						},
+					},
+					"responses": map[string]interface{}{
+						"201": map[string]interface{}{
+							"description": "User created successfully",
 						},
 					},
 				},
