@@ -254,7 +254,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handlers.LoginRequest"
+                            "$ref": "#/definitions/models.LoginRequest"
                         }
                     }
                 ],
@@ -303,7 +303,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handlers.RegisterRequest"
+                            "$ref": "#/definitions/models.UserRegistrationRequest"
                         }
                     }
                 ],
@@ -389,7 +389,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.LoginRequest": {
+        "models.LoginRequest": {
             "type": "object",
             "properties": {
                 "email": {
@@ -402,28 +402,17 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.RegisterRequest": {
+        "models.UserRegistrationRequest": {
+            "description": "User registration request body",
             "type": "object",
             "properties": {
-                "department": {
-                    "type": "string",
-                    "example": "IT"
-                },
                 "email": {
                     "type": "string",
                     "example": "john@example.com"
                 },
-                "employee_id": {
-                    "type": "string",
-                    "example": "EMP001"
-                },
-                "name": {
+                "full_name": {
                     "type": "string",
                     "example": "John Doe"
-                },
-                "nisn": {
-                    "type": "string",
-                    "example": "123456789"
                 },
                 "password": {
                     "type": "string",
@@ -433,13 +422,9 @@ const docTemplate = `{
                     "type": "string",
                     "example": "+628123456789"
                 },
-                "position": {
+                "role": {
                     "type": "string",
-                    "example": "Developer"
-                },
-                "status": {
-                    "type": "string",
-                    "example": "active"
+                    "example": "employee"
                 },
                 "username": {
                     "type": "string",

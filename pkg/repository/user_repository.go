@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"fmt"
 
 	"github.com/nepskuy/be-godplan/pkg/models"
 	"github.com/nepskuy/be-godplan/pkg/utils"
@@ -14,6 +15,7 @@ type UserRepositoryInterface interface {
 	FindByID(id int) (*models.User, error)
 	GetUserByID(userID int64) (*models.User, error)
 	UpdateUser(user *models.User) error
+	GetUserWithEmployeeData(userID int64) (*models.User, *models.Employee, error)
 }
 
 type UserRepository struct {
@@ -189,7 +191,7 @@ func (r *UserRepository) UpdateUser(user *models.User) error {
 	return nil
 }
 
-// GetUserWithEmployeeData - Get user data with employee information (jika diperlukan)
+// GetUserWithEmployeeData - Get user data with employee information
 func (r *UserRepository) GetUserWithEmployeeData(userID int64) (*models.User, *models.Employee, error) {
 	user := &models.User{}
 	employee := &models.Employee{}
@@ -226,7 +228,10 @@ func (r *UserRepository) GetUserWithEmployeeData(userID int64) (*models.User, *m
 		WHERE user_id = $1
 	`
 
-	err = r.db.QueryRow(employeeQuery, userID).Scan(
+	// Convert userID to string for UUID comparison
+	userIDStr := fmt.Sprintf("%d", userID)
+
+	err = r.db.QueryRow(employeeQuery, userIDStr).Scan(
 		&employee.ID,
 		&employee.UserID,
 		&employee.EmployeeID,

@@ -39,7 +39,7 @@ definitions:
         example: 106.8456
         type: number
     type: object
-  handlers.LoginRequest:
+  models.LoginRequest:
     properties:
       email:
         example: admin@godplan.com
@@ -48,22 +48,14 @@ definitions:
         example: password
         type: string
     type: object
-  handlers.RegisterRequest:
+  models.UserRegistrationRequest:
+    description: User registration request body
     properties:
-      department:
-        example: IT
-        type: string
       email:
         example: john@example.com
         type: string
-      employee_id:
-        example: EMP001
-        type: string
-      name:
+      full_name:
         example: John Doe
-        type: string
-      nisn:
-        example: "123456789"
         type: string
       password:
         example: password123
@@ -71,11 +63,8 @@ definitions:
       phone:
         example: "+628123456789"
         type: string
-      position:
-        example: Developer
-        type: string
-      status:
-        example: active
+      role:
+        example: employee
         type: string
       username:
         example: johndoe
@@ -247,7 +236,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/handlers.LoginRequest'
+          $ref: '#/definitions/models.LoginRequest'
       produces:
       - application/json
       responses:
@@ -280,7 +269,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/handlers.RegisterRequest'
+          $ref: '#/definitions/models.UserRegistrationRequest'
       produces:
       - application/json
       responses:

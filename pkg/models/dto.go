@@ -1,13 +1,5 @@
 package models
 
-// RegisterRequest represents user registration request
-type RegisterRequest struct {
-	Username string `json:"username" example:"johndoe"`
-	Name     string `json:"name" example:"John Doe"`
-	Email    string `json:"email" example:"john@example.com"`
-	Password string `json:"password" example:"password123"`
-}
-
 // LoginRequest represents login request
 type LoginRequest struct {
 	Email    string `json:"email" example:"admin@godplan.com"`
@@ -18,6 +10,17 @@ type LoginRequest struct {
 type LoginResponse struct {
 	Token string `json:"token"`
 	User  User   `json:"user"`
+}
+
+// UserRegistrationRequest represents user registration request
+// @Description User registration request body
+type UserRegistrationRequest struct {
+	Username string `json:"username" example:"johndoe"`
+	FullName string `json:"full_name" example:"John Doe"`
+	Email    string `json:"email" example:"john@example.com"`
+	Password string `json:"password" example:"password123"`
+	Phone    string `json:"phone,omitempty" example:"+628123456789"`
+	Role     string `json:"role,omitempty" example:"employee"`
 }
 
 // ClockInRequest represents clock-in request

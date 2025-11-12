@@ -10,29 +10,12 @@ import (
 
 	"github.com/nepskuy/be-godplan/pkg/config"
 	"github.com/nepskuy/be-godplan/pkg/database"
+	"github.com/nepskuy/be-godplan/pkg/models"
 	"github.com/nepskuy/be-godplan/pkg/utils"
 	"golang.org/x/crypto/bcrypt"
 )
 
 var jwtUtil = utils.NewJWTUtil("your-secret-key-change-in-production")
-
-type RegisterRequest struct {
-	Username   string `json:"username" example:"johndoe"`
-	Name       string `json:"name" example:"John Doe"`
-	Email      string `json:"email" example:"john@example.com"`
-	Password   string `json:"password" example:"password123"`
-	EmployeeID string `json:"employee_id,omitempty" example:"EMP001"`
-	NISN       string `json:"nisn,omitempty" example:"123456789"`
-	Department string `json:"department,omitempty" example:"IT"`
-	Position   string `json:"position,omitempty" example:"Developer"`
-	Status     string `json:"status,omitempty" example:"active"`
-	Phone      string `json:"phone,omitempty" example:"+628123456789"`
-}
-
-type LoginRequest struct {
-	Email    string `json:"email" example:"admin@godplan.com"`
-	Password string `json:"password" example:"password"`
-}
 
 // Register godoc
 // @Summary Register a new user
@@ -40,7 +23,7 @@ type LoginRequest struct {
 // @Tags auth
 // @Accept json
 // @Produce json
-// @Param request body RegisterRequest true "User registration data"
+// @Param request body models.UserRegistrationRequest true "User registration data"
 // @Success 201 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
@@ -61,7 +44,7 @@ func Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req RegisterRequest
+	var req models.UserRegistrationRequest
 
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
@@ -71,9 +54,9 @@ func Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Required fields validation
-	if req.Username == "" || req.Name == "" || req.Email == "" || req.Password == "" {
-		utils.ErrorResponse(w, http.StatusBadRequest, "Required fields: username, name, email, password")
+	// Required fields validation - SESUAI DENGAN MODEL BARU
+	if req.Username == "" || req.FullName == "" || req.Email == "" || req.Password == "" {
+		utils.ErrorResponse(w, http.StatusBadRequest, "Required fields: username, full_name, email, password")
 		return
 	}
 
@@ -97,39 +80,70 @@ func Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Set default role
+	if req.Role == "" {
+		req.Role = "employee"
+	}
+
 	// Gunakan context dengan timeout untuk query database
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	var userID int
+	var userID int64
 	err = database.DB.QueryRowContext(ctx,
-		`INSERT INTO users 
-			(username, name, email, password, role, employee_id, nisn, department, position, status, phone) 
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) 
+		`INSERT INTO godplan.users 
+			(username, email, password, role, full_name, phone, avatar_url, is_active, created_at, updated_at) 
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) 
 		 RETURNING id`,
 		req.Username,
-		req.Name,
 		req.Email,
 		string(hashedPassword),
-		"employee",
-		req.EmployeeID,
-		req.NISN,
-		req.Department,
-		req.Position,
-		req.Status,
+		req.Role,
+		req.FullName,
 		req.Phone,
+		"",   // avatar_url kosong
+		true, // is_active
+		time.Now(),
+		time.Now(),
 	).Scan(&userID)
 
 	if err != nil {
 		if config.IsDevelopment() {
 			fmt.Printf("Failed to create user: %v\n", err)
 		}
-		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to create user")
+		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to create user - user may already exist")
+		return
+	}
+
+	// Get the created user to return complete data
+	var createdUser models.User
+	err = database.DB.QueryRowContext(ctx,
+		`SELECT id, username, email, role, full_name, phone, avatar_url, is_active, created_at, updated_at 
+		 FROM godplan.users WHERE id = $1`,
+		userID,
+	).Scan(
+		&createdUser.ID,
+		&createdUser.Username,
+		&createdUser.Email,
+		&createdUser.Role,
+		&createdUser.FullName,
+		&createdUser.Phone,
+		&createdUser.AvatarURL,
+		&createdUser.IsActive,
+		&createdUser.CreatedAt,
+		&createdUser.UpdatedAt,
+	)
+
+	if err != nil {
+		if config.IsDevelopment() {
+			fmt.Printf("Failed to fetch created user: %v\n", err)
+		}
+		utils.ErrorResponse(w, http.StatusInternalServerError, "User created but failed to retrieve details")
 		return
 	}
 
 	// Generate JWT token
-	token, err := jwtUtil.GenerateToken(userID, req.Email, "employee")
+	token, err := jwtUtil.GenerateToken(int(createdUser.ID), createdUser.Email, createdUser.Role)
 	if err != nil {
 		if config.IsDevelopment() {
 			fmt.Printf("Failed to generate token: %v\n", err)
@@ -139,25 +153,13 @@ func Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if config.IsDevelopment() {
-		fmt.Printf("User registered successfully - ID: %d, Email: %s\n", userID, req.Email)
+		fmt.Printf("User registered successfully - ID: %d, Email: %s\n", createdUser.ID, createdUser.Email)
 	}
 
 	// Return response with complete user data
 	utils.SuccessResponse(w, http.StatusCreated, "User registered successfully", map[string]interface{}{
 		"token": token,
-		"user": map[string]interface{}{
-			"id":          userID,
-			"username":    req.Username,
-			"name":        req.Name,
-			"email":       req.Email,
-			"role":        "employee",
-			"employee_id": req.EmployeeID,
-			"nisn":        req.NISN,
-			"department":  req.Department,
-			"position":    req.Position,
-			"status":      req.Status,
-			"phone":       req.Phone,
-		},
+		"user":  createdUser,
 	})
 }
 
@@ -167,7 +169,7 @@ func Register(w http.ResponseWriter, r *http.Request) {
 // @Tags auth
 // @Accept json
 // @Produce json
-// @Param request body LoginRequest true "Login credentials"
+// @Param request body models.LoginRequest true "Login credentials"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
 // @Failure 401 {object} map[string]interface{}
@@ -188,7 +190,7 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var credentials LoginRequest
+	var credentials models.LoginRequest
 
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
@@ -207,39 +209,28 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		fmt.Printf("Login attempt - Email: %s\n", credentials.Email)
 	}
 
-	// User struct dengan field lengkap
-	var user struct {
-		ID         int    `json:"id"`
-		Username   string `json:"username"`
-		Name       string `json:"name"`
-		Email      string `json:"email"`
-		Password   string `json:"password"`
-		Role       string `json:"role"`
-		EmployeeID string `json:"employee_id"`
-		NISN       string `json:"nisn"`
-		Department string `json:"department"`
-		Position   string `json:"position"`
-		Status     string `json:"status"`
-		Phone      string `json:"phone"`
-	}
-
 	// Gunakan context dengan timeout untuk query database
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
+	var user models.User
 	err := database.DB.QueryRowContext(ctx,
-		`SELECT id, username, name, email, password, role, 
-			COALESCE(employee_id, '') as employee_id,
-			COALESCE(nisn, '') as nisn,
-			COALESCE(department, '') as department,
-			COALESCE(position, '') as position,
-			COALESCE(status, '') as status,
-			COALESCE(phone, '') as phone
-		 FROM users WHERE email = $1`,
+		`SELECT id, username, email, password, role, full_name, phone, 
+			avatar_url, is_active, created_at, updated_at
+		 FROM godplan.users WHERE email = $1 AND is_active = true`,
 		credentials.Email,
 	).Scan(
-		&user.ID, &user.Username, &user.Name, &user.Email, &user.Password, &user.Role,
-		&user.EmployeeID, &user.NISN, &user.Department, &user.Position, &user.Status, &user.Phone,
+		&user.ID,
+		&user.Username,
+		&user.Email,
+		&user.Password,
+		&user.Role,
+		&user.FullName,
+		&user.Phone,
+		&user.AvatarURL,
+		&user.IsActive,
+		&user.CreatedAt,
+		&user.UpdatedAt,
 	)
 
 	if err != nil {
@@ -269,7 +260,7 @@ func Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Generate JWT token
-	token, err := jwtUtil.GenerateToken(user.ID, user.Email, user.Role)
+	token, err := jwtUtil.GenerateToken(int(user.ID), user.Email, user.Role)
 	if err != nil {
 		if config.IsDevelopment() {
 			fmt.Printf("Token generation failed: %v\n", err)
@@ -282,21 +273,12 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		fmt.Printf("Login successful - User ID: %d, Role: %s\n", user.ID, user.Role)
 	}
 
+	// Clear password before returning user data
+	user.Password = ""
+
 	// Return response dengan data user lengkap
 	utils.SuccessResponse(w, http.StatusOK, "Login successful", map[string]interface{}{
 		"token": token,
-		"user": map[string]interface{}{
-			"id":          user.ID,
-			"username":    user.Username,
-			"name":        user.Name,
-			"email":       user.Email,
-			"role":        user.Role,
-			"employee_id": user.EmployeeID,
-			"nisn":        user.NISN,
-			"department":  user.Department,
-			"position":    user.Position,
-			"status":      user.Status,
-			"phone":       user.Phone,
-		},
+		"user":  user,
 	})
 }
