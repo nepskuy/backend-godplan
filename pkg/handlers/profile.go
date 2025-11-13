@@ -39,8 +39,8 @@ func GinGetProfile(userRepo *repository.UserRepository) gin.HandlerFunc {
 			return
 		}
 
-		// Get user from repository
-		user, err := userRepo.GetUserByID(id)
+		// Get user with employee data from repository
+		user, err := userRepo.GetUserWithEmployeeData(id)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get profile"})
 			return

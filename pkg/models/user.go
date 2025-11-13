@@ -10,13 +10,21 @@ type User struct {
 	Username  string    `json:"username" db:"username"`
 	Email     string    `json:"email" db:"email"`
 	Password  string    `json:"-" db:"password"`
-	Name      string    `json:"full_name,omitempty" db:"name"`
+	Name      string    `json:"name,omitempty" db:"name"`
 	Role      string    `json:"role,omitempty" db:"role"`
 	Phone     string    `json:"phone,omitempty" db:"phone"`
 	AvatarURL string    `json:"avatar_url,omitempty" db:"avatar_url"`
 	IsActive  bool      `json:"is_active" db:"is_active"`
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
+	// Employee fields
+	EmployeeID     string `json:"employee_id,omitempty" db:"employee_id"`
+	Department     string `json:"department,omitempty" db:"department"`
+	Position       string `json:"position,omitempty" db:"position"`
+	Status         string `json:"status,omitempty" db:"status"`
+	EmploymentType string `json:"employment_type,omitempty" db:"employment_type"`
+	JoinDate       string `json:"join_date,omitempty" db:"join_date"`
+	WorkSchedule   string `json:"work_schedule,omitempty" db:"work_schedule"`
 }
 
 // UserRegistrationRequest for register endpoint
@@ -24,7 +32,7 @@ type UserRegistrationRequest struct {
 	Username string `json:"username" binding:"required"`
 	Email    string `json:"email" binding:"required"`
 	Password string `json:"password" binding:"required"`
-	Name     string `json:"full_name" binding:"required"`
+	Name     string `json:"name" binding:"required"`
 	Phone    string `json:"phone,omitempty"`
 	Role     string `json:"role,omitempty"`
 }

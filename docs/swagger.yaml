@@ -42,33 +42,55 @@ definitions:
   models.LoginRequest:
     properties:
       email:
-        example: admin@godplan.com
         type: string
       password:
-        example: password
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  models.User:
+    properties:
+      avatar_url:
+        type: string
+      created_at:
+        type: string
+      email:
+        type: string
+      full_name:
+        type: string
+      id:
+        type: integer
+      is_active:
+        type: boolean
+      phone:
+        type: string
+      role:
+        type: string
+      updated_at:
+        type: string
+      username:
         type: string
     type: object
   models.UserRegistrationRequest:
-    description: User registration request body
     properties:
       email:
-        example: john@example.com
         type: string
       full_name:
-        example: John Doe
         type: string
       password:
-        example: password123
         type: string
       phone:
-        example: "+628123456789"
         type: string
       role:
-        example: employee
         type: string
       username:
-        example: johndoe
         type: string
+    required:
+    - email
+    - full_name
+    - password
+    - username
     type: object
   utils.GinResponse:
     properties:
@@ -291,4 +313,206 @@ paths:
       summary: Register a new user
       tags:
       - auth
+  /tasks:
+    get:
+      consumes:
+      - application/json
+      description: Get list of tasks for the current user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.GinResponse'
+      security:
+      - BearerAuth: []
+      summary: Get all tasks
+      tags:
+      - tasks
+    post:
+      consumes:
+      - application/json
+      description: Create a new task for the current user
+      parameters:
+      - description: Task data
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.GinResponse'
+      security:
+      - BearerAuth: []
+      summary: Create new task
+      tags:
+      - tasks
+  /tasks/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a task by ID
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.GinResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete task
+      tags:
+      - tasks
+    get:
+      consumes:
+      - application/json
+      description: Get a specific task by ID
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.GinResponse'
+      security:
+      - BearerAuth: []
+      summary: Get task by ID
+      tags:
+      - tasks
+    put:
+      consumes:
+      - application/json
+      description: Update an existing task
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Task data
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.GinResponse'
+      security:
+      - BearerAuth: []
+      summary: Update task
+      tags:
+      - tasks
+  /users:
+    get:
+      consumes:
+      - application/json
+      description: Get list of all active users
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.GinResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.GinResponse'
+      security:
+      - BearerAuth: []
+      summary: Get all users
+      tags:
+      - users
+    post:
+      consumes:
+      - application/json
+      description: Create a new user account
+      parameters:
+      - description: User data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.User'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/utils.GinResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.GinResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.GinResponse'
+      security:
+      - BearerAuth: []
+      summary: Create new user
+      tags:
+      - users
+  /users/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Get a specific user by ID
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.GinResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.GinResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.GinResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.GinResponse'
+      security:
+      - BearerAuth: []
+      summary: Get user by ID
+      tags:
+      - users
 swagger: "2.0"

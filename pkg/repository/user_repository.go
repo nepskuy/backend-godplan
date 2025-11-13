@@ -31,7 +31,7 @@ func (r *UserRepository) GetUserByID(id int64) (*models.User, error) {
 		&user.Email,
 		&user.Password,
 		&user.Role,
-		&user.Name, // ← UPDATE: &user.FullName jadi &user.Name
+		&user.Name,
 		&user.Phone,
 		&user.AvatarURL,
 		&user.IsActive,
@@ -44,6 +44,71 @@ func (r *UserRepository) GetUserByID(id int64) (*models.User, error) {
 			return nil, fmt.Errorf("user not found")
 		}
 		return nil, err
+	}
+
+	return &user, nil
+}
+
+// GetUserWithEmployeeData returns user data with employee information
+func (r *UserRepository) GetUserWithEmployeeData(userID int64) (*models.User, error) {
+	query := `
+		SELECT 
+			u.id, u.username, u.email, u.name, u.phone, u.role,
+			u.avatar_url, u.is_active, u.created_at, u.updated_at,
+			e.employee_id, e.join_date, e.employment_type, e.work_schedule,
+			d.name as department_name, 
+			p.name as position_name,
+			CASE 
+				WHEN e.employment_type = 'full_time' THEN 'Aktif'
+				WHEN e.employment_type = 'contract' THEN 'Kontrak'
+				WHEN e.employment_type = 'probation' THEN 'Percobaan' 
+				ELSE 'Tidak Terdefinisi'
+			END as status
+		FROM godplan.users u
+		LEFT JOIN godplan.employees e ON e.user_id = u.id
+		LEFT JOIN godplan.departments d ON e.department_id = d.id
+		LEFT JOIN godplan.positions p ON e.position_id = p.id
+		WHERE u.id = $1 AND u.is_active = true`
+
+	var user models.User
+	var employeeID, employmentType, workSchedule, departmentName, positionName, status sql.NullString
+	var joinDate sql.NullTime
+
+	err := r.db.QueryRow(query, userID).Scan(
+		&user.ID, &user.Username, &user.Email, &user.Name, &user.Phone, &user.Role,
+		&user.AvatarURL, &user.IsActive, &user.CreatedAt, &user.UpdatedAt,
+		&employeeID, &joinDate, &employmentType, &workSchedule,
+		&departmentName, &positionName, &status,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("user not found")
+		}
+		return nil, err
+	}
+
+	// Set employee data jika ada
+	if employeeID.Valid {
+		user.EmployeeID = employeeID.String
+	}
+	if employmentType.Valid {
+		user.EmploymentType = employmentType.String
+	}
+	if workSchedule.Valid {
+		user.WorkSchedule = workSchedule.String
+	}
+	if departmentName.Valid {
+		user.Department = departmentName.String
+	}
+	if positionName.Valid {
+		user.Position = positionName.String
+	}
+	if status.Valid {
+		user.Status = status.String
+	}
+	if joinDate.Valid {
+		user.JoinDate = joinDate.Time.Format("2006-01-02")
 	}
 
 	return &user, nil
@@ -62,7 +127,7 @@ func (r *UserRepository) GetUserByEmail(email string) (*models.User, error) {
 		&user.Email,
 		&user.Password,
 		&user.Role,
-		&user.Name, // ← UPDATE: &user.FullName jadi &user.Name
+		&user.Name,
 		&user.Phone,
 		&user.AvatarURL,
 		&user.IsActive,
@@ -93,7 +158,7 @@ func (r *UserRepository) GetUserByUsername(username string) (*models.User, error
 		&user.Email,
 		&user.Password,
 		&user.Role,
-		&user.Name, // ← UPDATE: &user.FullName jadi &user.Name
+		&user.Name,
 		&user.Phone,
 		&user.AvatarURL,
 		&user.IsActive,
@@ -124,7 +189,7 @@ func (r *UserRepository) CreateUser(user *models.User) error {
 		user.Email,
 		user.Password,
 		user.Role,
-		user.Name, // ← UPDATE: user.FullName jadi user.Name
+		user.Name,
 		user.Phone,
 		user.AvatarURL,
 		user.IsActive,
@@ -154,7 +219,7 @@ func (r *UserRepository) UpdateUser(user *models.User) error {
 		user.Username,
 		user.Email,
 		user.Role,
-		user.Name, // ← UPDATE: user.FullName jadi user.Name
+		user.Name,
 		user.Phone,
 		user.AvatarURL,
 		user.IsActive,
@@ -214,7 +279,7 @@ func (r *UserRepository) GetAllUsers() ([]models.User, error) {
 			&user.Username,
 			&user.Email,
 			&user.Role,
-			&user.Name, // ← UPDATE: &user.FullName jadi &user.Name
+			&user.Name,
 			&user.Phone,
 			&user.AvatarURL,
 			&user.IsActive,
