@@ -12,12 +12,28 @@ type User struct {
 	Email     string    `json:"email" db:"email" example:"john@example.com"`
 	Password  string    `json:"-" db:"password"`
 	Role      string    `json:"role" db:"role" example:"employee"`
-	FullName  string    `json:"full_name" db:"full_name" example:"John Doe"`
+	Name      string    `json:"full_name" db:"name" example:"John Doe"` // ← UBAH FullName MENJADI Name, db tag "name"
 	Phone     string    `json:"phone,omitempty" db:"phone" example:"+628123456789"`
 	AvatarURL string    `json:"avatar_url,omitempty" db:"avatar_url" example:"https://example.com/avatar.jpg"`
 	IsActive  bool      `json:"is_active" db:"is_active" example:"true"`
 	CreatedAt time.Time `json:"created_at" db:"created_at" example:"2023-10-01T00:00:00Z"`
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at" example:"2023-10-01T00:00:00Z"`
+}
+
+// UserRegistrationRequest for register endpoint
+type UserRegistrationRequest struct {
+	Username string `json:"username" binding:"required" example:"johndoe"`
+	Email    string `json:"email" binding:"required" example:"john@example.com"`
+	Password string `json:"password" binding:"required" example:"password123"`
+	Name     string `json:"full_name" binding:"required" example:"John Doe"`
+	Phone    string `json:"phone,omitempty" example:"+628123456789"`
+	Role     string `json:"role,omitempty" example:"employee"`
+}
+
+// LoginRequest for login endpoint
+type LoginRequest struct {
+	Email    string `json:"email" binding:"required" example:"admin@godplan.com"`
+	Password string `json:"password" binding:"required" example:"password"`
 }
 
 // Employee represents employee data structure

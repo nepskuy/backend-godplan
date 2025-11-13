@@ -8,17 +8,17 @@ import (
 )
 
 type AuthService struct {
-	userRepo repository.UserRepositoryInterface
+	userRepo *repository.UserRepository
 }
 
-func NewAuthService(userRepo repository.UserRepositoryInterface) *AuthService {
+func NewAuthService(userRepo *repository.UserRepository) *AuthService {
 	return &AuthService{userRepo: userRepo}
 }
 
 func (s *AuthService) Register(user *models.User) error {
-
-	_, err := s.userRepo.FindByEmail(user.Email)
-	if err == nil {
+	// Cek apakah user sudah ada
+	existingUser, err := s.userRepo.GetUserByEmail(user.Email)
+	if err == nil && existingUser != nil {
 		return utils.ErrEmailExists
 	}
 
@@ -36,7 +36,7 @@ func (s *AuthService) Register(user *models.User) error {
 }
 
 func (s *AuthService) Login(email, password string) (string, *models.User, error) {
-	user, err := s.userRepo.FindByEmail(email)
+	user, err := s.userRepo.GetUserByEmail(email)
 	if err != nil {
 		return "", nil, utils.ErrInvalidCredentials
 	}

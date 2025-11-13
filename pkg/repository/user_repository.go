@@ -3,76 +3,35 @@ package repository
 import (
 	"database/sql"
 	"fmt"
+	"log"
+	"time"
 
+	"github.com/nepskuy/be-godplan/pkg/config"
 	"github.com/nepskuy/be-godplan/pkg/models"
-	"github.com/nepskuy/be-godplan/pkg/utils"
 )
-
-// UserRepositoryInterface mendefinisikan contract untuk user repository
-type UserRepositoryInterface interface {
-	CreateUser(user *models.User) error
-	FindByEmail(email string) (*models.User, error)
-	FindByID(id int) (*models.User, error)
-	GetUserByID(userID int64) (*models.User, error)
-	UpdateUser(user *models.User) error
-	GetUserWithEmployeeData(userID int64) (*models.User, *models.Employee, error)
-}
 
 type UserRepository struct {
 	db *sql.DB
 }
 
-var _ UserRepositoryInterface = (*UserRepository)(nil)
-
 func NewUserRepository(db *sql.DB) *UserRepository {
 	return &UserRepository{db: db}
 }
 
-func (r *UserRepository) CreateUser(user *models.User) error {
-	query := `
-		INSERT INTO godplan.users 
-		(username, email, password, role, full_name, phone, avatar_url, is_active, created_at, updated_at) 
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) 
-		RETURNING id, created_at, updated_at
-	`
-
-	err := r.db.QueryRow(
-		query,
-		user.Username,
-		user.Email,
-		user.Password,
-		user.Role,
-		user.FullName,
-		user.Phone,
-		user.AvatarURL,
-		user.IsActive,
-		user.CreatedAt,
-		user.UpdatedAt,
-	).Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
-
-	if err != nil {
-		return utils.ErrInternalServer
-	}
-	return nil
-}
-
-func (r *UserRepository) FindByEmail(email string) (*models.User, error) {
-	user := &models.User{}
-	query := `
-		SELECT 
-			id, username, email, password, role, full_name, phone, 
-			avatar_url, is_active, created_at, updated_at 
+// GetUserByID mendapatkan user berdasarkan ID
+func (r *UserRepository) GetUserByID(id int64) (*models.User, error) {
+	var user models.User
+	err := r.db.QueryRow(`
+		SELECT id, username, email, password, role, name, phone, avatar_url, is_active, created_at, updated_at
 		FROM godplan.users 
-		WHERE email = $1 AND is_active = true
-	`
-
-	err := r.db.QueryRow(query, email).Scan(
+		WHERE id = $1 AND is_active = true
+	`, id).Scan(
 		&user.ID,
 		&user.Username,
 		&user.Email,
 		&user.Password,
 		&user.Role,
-		&user.FullName,
+		&user.Name, // ← UPDATE: &user.FullName jadi &user.Name
 		&user.Phone,
 		&user.AvatarURL,
 		&user.IsActive,
@@ -80,31 +39,30 @@ func (r *UserRepository) FindByEmail(email string) (*models.User, error) {
 		&user.UpdatedAt,
 	)
 
-	if err == sql.ErrNoRows {
-		return nil, utils.ErrUserNotFound
-	}
 	if err != nil {
-		return nil, utils.ErrInternalServer
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("user not found")
+		}
+		return nil, err
 	}
-	return user, nil
+
+	return &user, nil
 }
 
-func (r *UserRepository) FindByID(id int) (*models.User, error) {
-	user := &models.User{}
-	query := `
-		SELECT 
-			id, username, email, role, full_name, phone, 
-			avatar_url, is_active, created_at, updated_at 
+// GetUserByEmail mendapatkan user berdasarkan email
+func (r *UserRepository) GetUserByEmail(email string) (*models.User, error) {
+	var user models.User
+	err := r.db.QueryRow(`
+		SELECT id, username, email, password, role, name, phone, avatar_url, is_active, created_at, updated_at
 		FROM godplan.users 
-		WHERE id = $1 AND is_active = true
-	`
-
-	err := r.db.QueryRow(query, id).Scan(
+		WHERE email = $1 AND is_active = true
+	`, email).Scan(
 		&user.ID,
 		&user.Username,
 		&user.Email,
+		&user.Password,
 		&user.Role,
-		&user.FullName,
+		&user.Name, // ← UPDATE: &user.FullName jadi &user.Name
 		&user.Phone,
 		&user.AvatarURL,
 		&user.IsActive,
@@ -112,32 +70,30 @@ func (r *UserRepository) FindByID(id int) (*models.User, error) {
 		&user.UpdatedAt,
 	)
 
-	if err == sql.ErrNoRows {
-		return nil, utils.ErrUserNotFound
-	}
 	if err != nil {
-		return nil, utils.ErrInternalServer
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("user not found")
+		}
+		return nil, err
 	}
-	return user, nil
+
+	return &user, nil
 }
 
-func (r *UserRepository) GetUserByID(userID int64) (*models.User, error) {
-	user := &models.User{}
-
-	query := `
-		SELECT 
-			id, username, email, role, full_name, phone, 
-			avatar_url, is_active, created_at, updated_at 
+// GetUserByUsername mendapatkan user berdasarkan username
+func (r *UserRepository) GetUserByUsername(username string) (*models.User, error) {
+	var user models.User
+	err := r.db.QueryRow(`
+		SELECT id, username, email, password, role, name, phone, avatar_url, is_active, created_at, updated_at
 		FROM godplan.users 
-		WHERE id = $1 AND is_active = true
-	`
-
-	err := r.db.QueryRow(query, userID).Scan(
+		WHERE username = $1 AND is_active = true
+	`, username).Scan(
 		&user.ID,
 		&user.Username,
 		&user.Email,
+		&user.Password,
 		&user.Role,
-		&user.FullName,
+		&user.Name, // ← UPDATE: &user.FullName jadi &user.Name
 		&user.Phone,
 		&user.AvatarURL,
 		&user.IsActive,
@@ -145,110 +101,152 @@ func (r *UserRepository) GetUserByID(userID int64) (*models.User, error) {
 		&user.UpdatedAt,
 	)
 
-	if err == sql.ErrNoRows {
-		return nil, utils.ErrUserNotFound
-	}
 	if err != nil {
-		return nil, utils.ErrInternalServer
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("user not found")
+		}
+		return nil, err
 	}
-	return user, nil
+
+	return &user, nil
 }
 
-func (r *UserRepository) UpdateUser(user *models.User) error {
-	query := `
-		UPDATE godplan.users 
-		SET username = $1, email = $2, role = $3, full_name = $4, 
-			phone = $5, avatar_url = $6, is_active = $7, updated_at = $8
-		WHERE id = $9
-	`
-
-	result, err := r.db.Exec(
-		query,
+// CreateUser membuat user baru
+func (r *UserRepository) CreateUser(user *models.User) error {
+	var id int64
+	err := r.db.QueryRow(`
+		INSERT INTO godplan.users (
+			username, email, password, role, name, phone, avatar_url, is_active, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		RETURNING id
+	`,
 		user.Username,
 		user.Email,
+		user.Password,
 		user.Role,
-		user.FullName,
+		user.Name, // ← UPDATE: user.FullName jadi user.Name
 		user.Phone,
 		user.AvatarURL,
 		user.IsActive,
-		user.UpdatedAt,
+		time.Now(),
+		time.Now(),
+	).Scan(&id)
+
+	if err != nil {
+		if config.IsDevelopment() {
+			log.Printf("❌ Failed to create user in repository: %v", err)
+		}
+		return err
+	}
+
+	user.ID = id
+	return nil
+}
+
+// UpdateUser mengupdate data user
+func (r *UserRepository) UpdateUser(user *models.User) error {
+	_, err := r.db.Exec(`
+		UPDATE godplan.users 
+		SET username = $1, email = $2, role = $3, name = $4, phone = $5, 
+		    avatar_url = $6, is_active = $7, updated_at = $8
+		WHERE id = $9
+	`,
+		user.Username,
+		user.Email,
+		user.Role,
+		user.Name, // ← UPDATE: user.FullName jadi user.Name
+		user.Phone,
+		user.AvatarURL,
+		user.IsActive,
+		time.Now(),
 		user.ID,
 	)
 
 	if err != nil {
-		return utils.ErrInternalServer
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return utils.ErrInternalServer
-	}
-
-	if rowsAffected == 0 {
-		return utils.ErrUserNotFound
+		if config.IsDevelopment() {
+			log.Printf("❌ Failed to update user in repository: %v", err)
+		}
+		return err
 	}
 
 	return nil
 }
 
-// GetUserWithEmployeeData - Get user data with employee information
-func (r *UserRepository) GetUserWithEmployeeData(userID int64) (*models.User, *models.Employee, error) {
-	user := &models.User{}
-	employee := &models.Employee{}
-
-	// Get user data
-	userQuery := `
-		SELECT id, username, email, role, full_name, phone, avatar_url, is_active, created_at, updated_at 
-		FROM godplan.users 
-		WHERE id = $1 AND is_active = true
-	`
-
-	err := r.db.QueryRow(userQuery, userID).Scan(
-		&user.ID,
-		&user.Username,
-		&user.Email,
-		&user.Role,
-		&user.FullName,
-		&user.Phone,
-		&user.AvatarURL,
-		&user.IsActive,
-		&user.CreatedAt,
-		&user.UpdatedAt,
-	)
+// DeleteUser menghapus user (soft delete)
+func (r *UserRepository) DeleteUser(id int64) error {
+	_, err := r.db.Exec(`
+		UPDATE godplan.users 
+		SET is_active = false, updated_at = $1
+		WHERE id = $2
+	`, time.Now(), id)
 
 	if err != nil {
-		return nil, nil, err
+		if config.IsDevelopment() {
+			log.Printf("❌ Failed to delete user in repository: %v", err)
+		}
+		return err
 	}
 
-	// Get employee data if exists
-	employeeQuery := `
-		SELECT id, user_id, employee_id, department_id, position_id, base_salary, 
-			   join_date, employment_type, work_schedule, created_at, updated_at
-		FROM godplan.employees 
-		WHERE user_id = $1
-	`
+	return nil
+}
 
-	// Convert userID to string for UUID comparison
-	userIDStr := fmt.Sprintf("%d", userID)
+// GetAllUsers mendapatkan semua user aktif
+func (r *UserRepository) GetAllUsers() ([]models.User, error) {
+	rows, err := r.db.Query(`
+		SELECT id, username, email, role, name, phone, avatar_url, is_active, created_at, updated_at
+		FROM godplan.users 
+		WHERE is_active = true
+		ORDER BY created_at DESC
+	`)
+	if err != nil {
+		if config.IsDevelopment() {
+			log.Printf("❌ Failed to get all users in repository: %v", err)
+		}
+		return nil, err
+	}
+	defer rows.Close()
 
-	err = r.db.QueryRow(employeeQuery, userIDStr).Scan(
-		&employee.ID,
-		&employee.UserID,
-		&employee.EmployeeID,
-		&employee.DepartmentID,
-		&employee.PositionID,
-		&employee.BaseSalary,
-		&employee.JoinDate,
-		&employee.EmploymentType,
-		&employee.WorkSchedule,
-		&employee.CreatedAt,
-		&employee.UpdatedAt,
-	)
-
-	// Employee data might not exist, so we don't return error if not found
-	if err != nil && err != sql.ErrNoRows {
-		return nil, nil, err
+	var users []models.User
+	for rows.Next() {
+		var user models.User
+		err := rows.Scan(
+			&user.ID,
+			&user.Username,
+			&user.Email,
+			&user.Role,
+			&user.Name, // ← UPDATE: &user.FullName jadi &user.Name
+			&user.Phone,
+			&user.AvatarURL,
+			&user.IsActive,
+			&user.CreatedAt,
+			&user.UpdatedAt,
+		)
+		if err != nil {
+			if config.IsDevelopment() {
+				log.Printf("❌ Failed to scan user in repository: %v", err)
+			}
+			continue
+		}
+		users = append(users, user)
 	}
 
-	return user, employee, nil
+	return users, nil
+}
+
+// UpdatePassword mengupdate password user
+func (r *UserRepository) UpdatePassword(userID int64, hashedPassword string) error {
+	_, err := r.db.Exec(`
+		UPDATE godplan.users 
+		SET password = $1, updated_at = $2
+		WHERE id = $3
+	`, hashedPassword, time.Now(), userID)
+
+	if err != nil {
+		if config.IsDevelopment() {
+			log.Printf("❌ Failed to update password in repository: %v", err)
+		}
+		return err
+	}
+
+	return nil
 }

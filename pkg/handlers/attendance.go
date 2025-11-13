@@ -85,11 +85,12 @@ func CheckLocation(c *gin.Context) {
 	// 🔥 NEW: Gunakan location validation dari utils
 	validation := utils.ValidateLocation(req.Latitude, req.Longitude)
 
-	response := models.LocationValidationResponse{
-		InRange:   validation.InRange,
-		Message:   validation.Message,
-		NeedForce: validation.NeedForce,
-		Distance:  validation.Distance,
+	// Gunakan response langsung dari utils.ValidationResult
+	response := map[string]interface{}{
+		"in_range":   validation.InRange,
+		"message":    validation.Message,
+		"need_force": validation.NeedForce,
+		"distance":   validation.Distance,
 	}
 
 	utils.GinSuccessResponse(c, http.StatusOK, "Location validation successful", response)
