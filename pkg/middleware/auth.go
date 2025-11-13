@@ -1,34 +1,40 @@
 package middleware
 
 import (
-	"context"
 	"net/http"
 	"strings"
 
+	"github.com/gin-gonic/gin"
 	"github.com/nepskuy/be-godplan/pkg/utils"
 )
 
-// Simpan JWT util instance - TETAP DI SINI
+// JWT util instance - PASTIKAN ADA DI SINI
 var jwtUtil = utils.NewJWTUtil("your-secret-key-change-in-production")
 
-func AuthMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// GinAuthMiddleware untuk framework Gin
+func GinAuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
 		// Skip auth for public routes
-		if r.URL.Path == "/api/v1/auth/login" || r.URL.Path == "/api/v1/auth/register" || r.URL.Path == "/health" {
-			next.ServeHTTP(w, r)
+		if c.Request.URL.Path == "/api/v1/auth/login" ||
+			c.Request.URL.Path == "/api/v1/auth/register" ||
+			c.Request.URL.Path == "/health" ||
+			c.Request.URL.Path == "/api/v1/health" {
+			c.Next()
 			return
 		}
 
-		authHeader := r.Header.Get("Authorization")
+		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			utils.ErrorResponse(w, http.StatusUnauthorized, "Authorization header required")
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header required"})
+			c.Abort()
 			return
 		}
 
 		// Extract token from "Bearer <token>"
 		parts := strings.Split(authHeader, " ")
 		if len(parts) != 2 || parts[0] != "Bearer" {
-			utils.ErrorResponse(w, http.StatusUnauthorized, "Invalid authorization format")
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid authorization format"})
+			c.Abort()
 			return
 		}
 
@@ -37,17 +43,15 @@ func AuthMiddleware(next http.Handler) http.Handler {
 		// Validate token and get claims
 		claims, err := jwtUtil.ValidateToken(tokenString)
 		if err != nil {
-			utils.ErrorResponse(w, http.StatusUnauthorized, "Invalid token")
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+			c.Abort()
 			return
 		}
 
-		// Extract userID from claims struct
-		userID := int(claims.UserID)
+		// Set userID in Gin context
+		c.Set("userID", int(claims.UserID))
 
-		// Create new context with userID
-		ctx := context.WithValue(r.Context(), "userID", userID)
-
-		// Token valid, continue to next handler with new context
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
+		// Token valid, continue to next handler
+		c.Next()
+	}
 }

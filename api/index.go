@@ -61,6 +61,7 @@ func setupGin() {
 	router.Use(gin.Recovery())
 	router.Use(middleware.GinCORS())
 	router.Use(middleware.GinLogging())
+	router.Use(middleware.GinDatabaseCheck()) // ← TAMBAHKAN DATABASE CHECK MIDDLEWARE
 
 	log.Printf("🟢 Gin middleware registered")
 
@@ -68,7 +69,7 @@ func setupGin() {
 	router.GET("/health", ginHealthCheck)
 	router.GET("/api/v1/health", ginHealthCheck)
 
-	// Swagger routes - FIXED untuk baca file yang benar
+	// Swagger routes
 	router.GET("/swagger", ginSwaggerHandler)
 	router.GET("/swagger/*any", ginSwaggerRedirectHandler)
 	router.GET("/swagger.json", ginSwaggerJSONHandler)
@@ -77,14 +78,14 @@ func setupGin() {
 		c.Redirect(http.StatusFound, "/swagger")
 	})
 
-	// API Routes
+	// API Routes - UPDATE: HAPUS SEMUA ginAuthWrapper
 	api := router.Group("/api/v1")
 	{
 		// Public routes - No authentication required
 		public := api.Group("/auth")
 		{
-			public.POST("/register", handlers.Register) // LANGSUNG tanpa wrapper
-			public.POST("/login", handlers.Login)       // LANGSUNG tanpa wrapper
+			public.POST("/register", handlers.Register)
+			public.POST("/login", handlers.Login)
 		}
 
 		// Protected routes - Authentication required
@@ -106,7 +107,7 @@ func setupGin() {
 			protected.PUT("/tasks/:id", handlers.UpdateTask)
 			protected.DELETE("/tasks/:id", handlers.DeleteTask)
 
-			// Attendance routes - GUNAKAN HANDLER GIN BARU
+			// Attendance routes
 			protected.POST("/attendance/clock-in", handlers.ClockIn)
 			protected.POST("/attendance/clock-out", handlers.ClockOut)
 			protected.POST("/attendance/check-location", handlers.CheckLocation)
@@ -163,7 +164,7 @@ func ginHealthCheck(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-// ginSwaggerJSONHandler handles swagger.json request - FIXED
+// ginSwaggerJSONHandler handles swagger.json request
 func ginSwaggerJSONHandler(c *gin.Context) {
 	// Coba baca file swagger.json dari root directory
 	data, err := os.ReadFile("./docs/swagger.json")
@@ -182,7 +183,7 @@ func ginSwaggerJSONHandler(c *gin.Context) {
 	c.Data(200, "application/json", data)
 }
 
-// ginSwaggerYAMLHandler handles swagger.yaml request - FIXED
+// ginSwaggerYAMLHandler handles swagger.yaml request
 func ginSwaggerYAMLHandler(c *gin.Context) {
 	// Coba baca file swagger.yaml dari root directory
 	data, err := os.ReadFile("./docs/swagger.yaml")

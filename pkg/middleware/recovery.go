@@ -4,17 +4,22 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/nepskuy/be-godplan/pkg/utils"
+	"github.com/gin-gonic/gin"
 )
 
-func Recovery(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// GinRecovery middleware untuk Gin
+func GinRecovery() gin.HandlerFunc {
+	return func(c *gin.Context) {
 		defer func() {
 			if err := recover(); err != nil {
-				log.Printf("🚨 PANIC RECOVERED: %v", err)
-				utils.ErrorResponse(w, http.StatusInternalServerError, "Internal Server Error")
+				log.Printf("🚨 PANIC recovered: %v", err)
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": "Internal server error",
+				})
+				c.Abort()
 			}
 		}()
-		next.ServeHTTP(w, r)
-	})
+
+		c.Next()
+	}
 }

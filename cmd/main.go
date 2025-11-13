@@ -104,14 +104,15 @@ func setupGinRouter(userRepo *repository.UserRepository) *gin.Engine {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	router := gin.Default()
+	router := gin.New()
 
 	log.Println("🔧 Setting up Gin middleware...")
 
 	// Apply middleware
+	router.Use(gin.Recovery())
 	router.Use(middleware.GinCORS())
 	router.Use(middleware.GinLogging())
-	router.Use(middleware.GinRecovery())
+	router.Use(middleware.GinDatabaseCheck()) // ← TAMBAHKAN DATABASE CHECK
 
 	log.Println("✅ Gin middleware registered")
 
@@ -123,12 +124,9 @@ func setupGinRouter(userRepo *repository.UserRepository) *gin.Engine {
 
 	// Swagger routes
 	router.GET("/swagger", ginSwaggerHandler)
-	router.GET("/swagger.json", func(c *gin.Context) {
-		c.File("./docs/swagger.json")
-	})
-	router.GET("/swagger.yaml", func(c *gin.Context) {
-		c.File("./docs/swagger.yaml")
-	})
+	router.GET("/swagger/*any", ginSwaggerRedirectHandler)
+	router.GET("/swagger.json", ginSwaggerJSONHandler)
+	router.GET("/swagger.yaml", ginSwaggerYAMLHandler)
 
 	// Root redirect to Swagger
 	router.GET("/", func(c *gin.Context) {
@@ -141,8 +139,8 @@ func setupGinRouter(userRepo *repository.UserRepository) *gin.Engine {
 		// Public routes - No authentication required
 		public := api.Group("/auth")
 		{
-			public.POST("/register", handlers.Register) // LANGSUNG tanpa wrapper
-			public.POST("/login", handlers.Login)       // LANGSUNG tanpa wrapper
+			public.POST("/register", handlers.Register)
+			public.POST("/login", handlers.Login)
 		}
 
 		// Protected routes - Authentication required
@@ -164,7 +162,7 @@ func setupGinRouter(userRepo *repository.UserRepository) *gin.Engine {
 			protected.PUT("/tasks/:id", handlers.UpdateTask)
 			protected.DELETE("/tasks/:id", handlers.DeleteTask)
 
-			// Attendance routes - GUNAKAN HANDLER GIN BARU
+			// Attendance routes
 			protected.POST("/attendance/clock-in", handlers.ClockIn)
 			protected.POST("/attendance/clock-out", handlers.ClockOut)
 			protected.POST("/attendance/check-location", handlers.CheckLocation)
@@ -175,7 +173,8 @@ func setupGinRouter(userRepo *repository.UserRepository) *gin.Engine {
 	// 404 handler
 	router.NoRoute(func(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{
-			"error": "Route not found: " + c.Request.URL.Path,
+			"error":   true,
+			"message": "Route not found: " + c.Request.URL.Path,
 		})
 	})
 
@@ -206,6 +205,51 @@ func ginHealthCheck(c *gin.Context) {
 		"version":      "1.0.0",
 		"using_db_url": cfg.DatabaseURL != "",
 	})
+}
+
+// ginSwaggerJSONHandler handles swagger.json request
+func ginSwaggerJSONHandler(c *gin.Context) {
+	// Coba baca file swagger.json dari root directory
+	data, err := os.ReadFile("./docs/swagger.json")
+	if err != nil {
+		// Fallback: coba baca dari path relative
+		data, err = os.ReadFile("docs/swagger.json")
+		if err != nil {
+			log.Printf("❌ Failed to read swagger.json: %v", err)
+			c.JSON(404, gin.H{
+				"error":   true,
+				"message": "swagger.json not found",
+			})
+			return
+		}
+	}
+
+	c.Data(200, "application/json", data)
+}
+
+// ginSwaggerYAMLHandler handles swagger.yaml request
+func ginSwaggerYAMLHandler(c *gin.Context) {
+	// Coba baca file swagger.yaml dari root directory
+	data, err := os.ReadFile("./docs/swagger.yaml")
+	if err != nil {
+		// Fallback: coba baca dari path relative
+		data, err = os.ReadFile("docs/swagger.yaml")
+		if err != nil {
+			log.Printf("❌ Failed to read swagger.yaml: %v", err)
+			c.JSON(404, gin.H{
+				"error":   true,
+				"message": "swagger.yaml not found",
+			})
+			return
+		}
+	}
+
+	c.Data(200, "application/yaml", data)
+}
+
+// ginSwaggerRedirectHandler handles other Swagger UI routes
+func ginSwaggerRedirectHandler(c *gin.Context) {
+	c.Redirect(http.StatusFound, "/swagger")
 }
 
 func ginSwaggerHandler(c *gin.Context) {
