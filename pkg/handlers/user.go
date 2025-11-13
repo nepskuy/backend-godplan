@@ -1,13 +1,11 @@
 package handlers
 
 import (
-	"encoding/json"
 	"fmt"
-	"net/http"
 	"strconv"
 	"time"
 
-	"github.com/gorilla/mux"
+	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/nepskuy/be-godplan/pkg/config"
@@ -16,13 +14,23 @@ import (
 	"github.com/nepskuy/be-godplan/pkg/utils"
 )
 
-func GetUsers(w http.ResponseWriter, r *http.Request) {
+// GetUsers godoc
+// @Summary Get all users
+// @Description Get list of all active users
+// @Tags users
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} utils.GinResponse
+// @Failure 500 {object} utils.GinResponse
+// @Router /users [get]
+func GetUsers(c *gin.Context) {
 	// Check database connection
 	if err := database.HealthCheck(); err != nil {
 		if config.IsDevelopment() {
 			fmt.Printf("❌ Database connection error in GetUsers: %v\n", err)
 		}
-		utils.ErrorResponse(w, http.StatusServiceUnavailable, "Database connection lost")
+		utils.GinErrorResponse(c, 503, "Database connection lost")
 		return
 	}
 
@@ -36,7 +44,7 @@ func GetUsers(w http.ResponseWriter, r *http.Request) {
 		if config.IsDevelopment() {
 			fmt.Printf("❌ Failed to fetch users: %v\n", err)
 		}
-		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to fetch users")
+		utils.GinErrorResponse(c, 500, "Failed to fetch users")
 		return
 	}
 	defer rows.Close()
@@ -69,29 +77,40 @@ func GetUsers(w http.ResponseWriter, r *http.Request) {
 		fmt.Printf("✅ GetUsers successful: found %d users\n", len(users))
 	}
 
-	utils.SuccessResponse(w, http.StatusOK, "Users retrieved successfully", users)
+	utils.GinSuccessResponse(c, 200, "Users retrieved successfully", users)
 }
 
-func CreateUser(w http.ResponseWriter, r *http.Request) {
+// CreateUser godoc
+// @Summary Create new user
+// @Description Create a new user account
+// @Tags users
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body models.User true "User data"
+// @Success 201 {object} utils.GinResponse
+// @Failure 400 {object} utils.GinResponse
+// @Failure 500 {object} utils.GinResponse
+// @Router /users [post]
+func CreateUser(c *gin.Context) {
 	// Check database connection
 	if err := database.HealthCheck(); err != nil {
 		if config.IsDevelopment() {
 			fmt.Printf("❌ Database connection error in CreateUser: %v\n", err)
 		}
-		utils.ErrorResponse(w, http.StatusServiceUnavailable, "Database connection lost")
+		utils.GinErrorResponse(c, 503, "Database connection lost")
 		return
 	}
 
 	var user models.User
-	err := json.NewDecoder(r.Body).Decode(&user)
-	if err != nil {
-		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid request body")
+	if err := c.ShouldBindJSON(&user); err != nil {
+		utils.GinErrorResponse(c, 400, "Invalid request body")
 		return
 	}
 
 	// Validate required fields
 	if user.Username == "" || user.Email == "" || user.Password == "" {
-		utils.ErrorResponse(w, http.StatusBadRequest, "Username, email, and password are required")
+		utils.GinErrorResponse(c, 400, "Username, email, and password are required")
 		return
 	}
 
@@ -109,7 +128,7 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 		if config.IsDevelopment() {
 			fmt.Printf("❌ Failed to hash password: %v\n", err)
 		}
-		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to process request")
+		utils.GinErrorResponse(c, 500, "Failed to process request")
 		return
 	}
 
@@ -134,7 +153,7 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 		if config.IsDevelopment() {
 			fmt.Printf("❌ Failed to create user: %v\n", err)
 		}
-		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to create user - user may already exist")
+		utils.GinErrorResponse(c, 500, "Failed to create user - user may already exist")
 		return
 	}
 
@@ -161,7 +180,7 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 		if config.IsDevelopment() {
 			fmt.Printf("❌ Failed to fetch created user: %v\n", err)
 		}
-		utils.ErrorResponse(w, http.StatusInternalServerError, "User created but failed to retrieve details")
+		utils.GinErrorResponse(c, 500, "User created but failed to retrieve details")
 		return
 	}
 
@@ -169,23 +188,36 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 		fmt.Printf("✅ CreateUser successful: ID=%d, Username=%s, Email=%s\n", createdUser.ID, createdUser.Username, createdUser.Email)
 	}
 
-	utils.SuccessResponse(w, http.StatusCreated, "User created successfully", createdUser)
+	utils.GinSuccessResponse(c, 201, "User created successfully", createdUser)
 }
 
-func GetUser(w http.ResponseWriter, r *http.Request) {
+// GetUser godoc
+// @Summary Get user by ID
+// @Description Get a specific user by ID
+// @Tags users
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "User ID"
+// @Success 200 {object} utils.GinResponse
+// @Failure 400 {object} utils.GinResponse
+// @Failure 404 {object} utils.GinResponse
+// @Failure 500 {object} utils.GinResponse
+// @Router /users/{id} [get]
+func GetUser(c *gin.Context) {
 	// Check database connection
 	if err := database.HealthCheck(); err != nil {
 		if config.IsDevelopment() {
 			fmt.Printf("❌ Database connection error in GetUser: %v\n", err)
 		}
-		utils.ErrorResponse(w, http.StatusServiceUnavailable, "Database connection lost")
+		utils.GinErrorResponse(c, 503, "Database connection lost")
 		return
 	}
 
-	vars := mux.Vars(r)
-	id, err := strconv.Atoi(vars["id"])
+	idStr := c.Param("id")
+	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid user ID")
+		utils.GinErrorResponse(c, 400, "Invalid user ID")
 		return
 	}
 
@@ -211,7 +243,7 @@ func GetUser(w http.ResponseWriter, r *http.Request) {
 		if config.IsDevelopment() {
 			fmt.Printf("❌ User not found: ID=%d, error=%v\n", id, err)
 		}
-		utils.ErrorResponse(w, http.StatusNotFound, "User not found")
+		utils.GinErrorResponse(c, 404, "User not found")
 		return
 	}
 
@@ -219,5 +251,5 @@ func GetUser(w http.ResponseWriter, r *http.Request) {
 		fmt.Printf("✅ GetUser successful: ID=%d, Username=%s\n", user.ID, user.Username)
 	}
 
-	utils.SuccessResponse(w, http.StatusOK, "User retrieved successfully", user)
+	utils.GinSuccessResponse(c, 200, "User retrieved successfully", user)
 }

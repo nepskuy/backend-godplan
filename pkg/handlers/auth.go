@@ -2,12 +2,11 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
 	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/nepskuy/be-godplan/pkg/config"
 	"github.com/nepskuy/be-godplan/pkg/database"
 	"github.com/nepskuy/be-godplan/pkg/models"
@@ -28,55 +27,70 @@ var jwtUtil = utils.NewJWTUtil("your-secret-key-change-in-production")
 // @Failure 400 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
 // @Router /auth/register [post]
-func Register(w http.ResponseWriter, r *http.Request) {
+func Register(c *gin.Context) {
 	// Check database connection first
 	if err := database.HealthCheck(); err != nil {
 		if config.IsDevelopment() {
 			fmt.Printf("❌ Database connection error in Register: %v\n", err)
 		}
-		utils.ErrorResponse(w, http.StatusServiceUnavailable, "Database connection lost")
-		return
-	}
-
-	contentType := r.Header.Get("Content-Type")
-	if !strings.Contains(contentType, "application/json") {
-		utils.ErrorResponse(w, http.StatusBadRequest, "Content-Type must be application/json")
+		c.JSON(503, gin.H{
+			"success": false,
+			"error":   "Database connection lost",
+		})
 		return
 	}
 
 	var req models.UserRegistrationRequest
 
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-
-	if err := decoder.Decode(&req); err != nil {
-		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid JSON format")
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, gin.H{
+			"success": false,
+			"error":   "Invalid JSON format",
+		})
 		return
 	}
 
-	// Required fields validation - SESUAI DENGAN MODEL BARU
+	// Required fields validation
 	if req.Username == "" || req.FullName == "" || req.Email == "" || req.Password == "" {
-		utils.ErrorResponse(w, http.StatusBadRequest, "Required fields: username, full_name, email, password")
+		c.JSON(400, gin.H{
+			"success": false,
+			"error":   "Required fields: username, full_name, email, password",
+		})
 		return
 	}
 
 	if !strings.Contains(req.Email, "@") || !strings.Contains(req.Email, ".") {
-		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid email format")
+		c.JSON(400, gin.H{
+			"success": false,
+			"error":   "Invalid email format",
+		})
 		return
 	}
 
 	if len(req.Password) < 6 {
-		utils.ErrorResponse(w, http.StatusBadRequest, "Password must be at least 6 characters")
+		c.JSON(400, gin.H{
+			"success": false,
+			"error":   "Password must be at least 6 characters",
+		})
 		return
+	}
+
+	// DEBUG: Print received data
+	if config.IsDevelopment() {
+		fmt.Printf("📥 REGISTER ATTEMPT - Username: %s, Email: %s, FullName: %s\n",
+			req.Username, req.Email, req.FullName)
 	}
 
 	// Hash password
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		if config.IsDevelopment() {
-			fmt.Printf("Failed to hash password: %v\n", err)
+			fmt.Printf("❌ Failed to hash password: %v\n", err)
 		}
-		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to process request")
+		c.JSON(500, gin.H{
+			"success": false,
+			"error":   "Failed to process request",
+		})
 		return
 	}
 
@@ -86,7 +100,7 @@ func Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Gunakan context dengan timeout untuk query database
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
 	var userID int64
@@ -109,9 +123,28 @@ func Register(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		if config.IsDevelopment() {
-			fmt.Printf("Failed to create user: %v\n", err)
+			fmt.Printf("❌ Failed to create user: %v\n", err)
+
+			// Check if user already exists
+			var usernameCount, emailCount int
+			database.DB.QueryRow("SELECT COUNT(*) FROM godplan.users WHERE username = $1", req.Username).Scan(&usernameCount)
+			database.DB.QueryRow("SELECT COUNT(*) FROM godplan.users WHERE email = $1", req.Email).Scan(&emailCount)
+
+			fmt.Printf("🔍 Username '%s' exists: %d, Email '%s' exists: %d\n",
+				req.Username, usernameCount, req.Email, emailCount)
 		}
-		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to create user - user may already exist")
+
+		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
+			c.JSON(409, gin.H{
+				"success": false,
+				"error":   "User with this email or username already exists",
+			})
+		} else {
+			c.JSON(500, gin.H{
+				"success": false,
+				"error":   "Failed to create user - " + err.Error(),
+			})
+		}
 		return
 	}
 
@@ -136,9 +169,12 @@ func Register(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		if config.IsDevelopment() {
-			fmt.Printf("Failed to fetch created user: %v\n", err)
+			fmt.Printf("❌ Failed to fetch created user: %v\n", err)
 		}
-		utils.ErrorResponse(w, http.StatusInternalServerError, "User created but failed to retrieve details")
+		c.JSON(500, gin.H{
+			"success": false,
+			"error":   "User created but failed to retrieve details",
+		})
 		return
 	}
 
@@ -146,20 +182,27 @@ func Register(w http.ResponseWriter, r *http.Request) {
 	token, err := jwtUtil.GenerateToken(int(createdUser.ID), createdUser.Email, createdUser.Role)
 	if err != nil {
 		if config.IsDevelopment() {
-			fmt.Printf("Failed to generate token: %v\n", err)
+			fmt.Printf("❌ Failed to generate token: %v\n", err)
 		}
-		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to process request")
+		c.JSON(500, gin.H{
+			"success": false,
+			"error":   "Failed to process request",
+		})
 		return
 	}
 
 	if config.IsDevelopment() {
-		fmt.Printf("User registered successfully - ID: %d, Email: %s\n", createdUser.ID, createdUser.Email)
+		fmt.Printf("✅ User registered successfully - ID: %d, Email: %s\n", createdUser.ID, createdUser.Email)
 	}
 
 	// Return response with complete user data
-	utils.SuccessResponse(w, http.StatusCreated, "User registered successfully", map[string]interface{}{
-		"token": token,
-		"user":  createdUser,
+	c.JSON(201, gin.H{
+		"success": true,
+		"message": "User registered successfully",
+		"data": map[string]interface{}{
+			"token": token,
+			"user":  createdUser,
+		},
 	})
 }
 
@@ -174,43 +217,43 @@ func Register(w http.ResponseWriter, r *http.Request) {
 // @Failure 400 {object} map[string]interface{}
 // @Failure 401 {object} map[string]interface{}
 // @Router /auth/login [post]
-func Login(w http.ResponseWriter, r *http.Request) {
+func Login(c *gin.Context) {
 	// Check database connection first
 	if err := database.HealthCheck(); err != nil {
 		if config.IsDevelopment() {
 			fmt.Printf("❌ Database connection error in Login: %v\n", err)
 		}
-		utils.ErrorResponse(w, http.StatusServiceUnavailable, "Database connection lost")
-		return
-	}
-
-	contentType := r.Header.Get("Content-Type")
-	if !strings.Contains(contentType, "application/json") {
-		utils.ErrorResponse(w, http.StatusBadRequest, "Content-Type must be application/json")
+		c.JSON(503, gin.H{
+			"success": false,
+			"error":   "Database connection lost",
+		})
 		return
 	}
 
 	var credentials models.LoginRequest
 
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-
-	if err := decoder.Decode(&credentials); err != nil {
-		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid JSON format")
+	if err := c.ShouldBindJSON(&credentials); err != nil {
+		c.JSON(400, gin.H{
+			"success": false,
+			"error":   "Invalid JSON format",
+		})
 		return
 	}
 
 	if credentials.Email == "" || credentials.Password == "" {
-		utils.ErrorResponse(w, http.StatusBadRequest, "Email and password are required")
+		c.JSON(400, gin.H{
+			"success": false,
+			"error":   "Email and password are required",
+		})
 		return
 	}
 
 	if config.IsDevelopment() {
-		fmt.Printf("Login attempt - Email: %s\n", credentials.Email)
+		fmt.Printf("🔐 LOGIN ATTEMPT - Email: %s\n", credentials.Email)
 	}
 
 	// Gunakan context dengan timeout untuk query database
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
 	var user models.User
@@ -235,50 +278,71 @@ func Login(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		if config.IsDevelopment() {
-			fmt.Printf("User not found or DB error: %v\n", err)
+			fmt.Printf("❌ User not found or DB error: %v\n", err)
 		}
-		utils.ErrorResponse(w, http.StatusUnauthorized, "Invalid credentials")
+		c.JSON(401, gin.H{
+			"success": false,
+			"error":   "Invalid credentials",
+		})
 		return
 	}
 
 	if config.IsDevelopment() {
-		fmt.Printf("User found - ID: %d, Email: %s, Role: %s\n", user.ID, user.Email, user.Role)
+		fmt.Printf("✅ User found - ID: %d, Email: %s, Role: %s\n", user.ID, user.Email, user.Role)
+		fmt.Printf("🔐 PASSWORD DEBUG - Stored hash: %s\n", user.Password)
+		fmt.Printf("🔐 PASSWORD DEBUG - Input password: %s\n", credentials.Password)
 	}
 
 	// Verify password
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(credentials.Password))
 	if err != nil {
 		if config.IsDevelopment() {
-			fmt.Printf("Password mismatch for user: %s\n", credentials.Email)
+			fmt.Printf("❌ PASSWORD MISMATCH: %v\n", err)
+
+			// Test hash the input password to debug
+			testHash, hashErr := bcrypt.GenerateFromPassword([]byte(credentials.Password), bcrypt.DefaultCost)
+			if hashErr == nil {
+				fmt.Printf("🔐 DEBUG - New hash of input: %s\n", string(testHash))
+			}
 		}
-		utils.ErrorResponse(w, http.StatusUnauthorized, "Invalid credentials")
+		c.JSON(401, gin.H{
+			"success": false,
+			"error":   "Invalid credentials",
+		})
 		return
 	}
 
 	if config.IsDevelopment() {
-		fmt.Printf("Password verified successfully\n")
+		fmt.Printf("✅ Password verified successfully\n")
 	}
 
 	// Generate JWT token
 	token, err := jwtUtil.GenerateToken(int(user.ID), user.Email, user.Role)
 	if err != nil {
 		if config.IsDevelopment() {
-			fmt.Printf("Token generation failed: %v\n", err)
+			fmt.Printf("❌ Token generation failed: %v\n", err)
 		}
-		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to process request")
+		c.JSON(500, gin.H{
+			"success": false,
+			"error":   "Failed to process request",
+		})
 		return
 	}
 
 	if config.IsDevelopment() {
-		fmt.Printf("Login successful - User ID: %d, Role: %s\n", user.ID, user.Role)
+		fmt.Printf("✅ Login successful - User ID: %d, Role: %s\n", user.ID, user.Role)
 	}
 
 	// Clear password before returning user data
 	user.Password = ""
 
 	// Return response dengan data user lengkap
-	utils.SuccessResponse(w, http.StatusOK, "Login successful", map[string]interface{}{
-		"token": token,
-		"user":  user,
+	c.JSON(200, gin.H{
+		"success": true,
+		"message": "Login successful",
+		"data": map[string]interface{}{
+			"token": token,
+			"user":  user,
+		},
 	})
 }

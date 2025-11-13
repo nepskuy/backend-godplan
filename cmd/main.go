@@ -141,34 +141,34 @@ func setupGinRouter(userRepo *repository.UserRepository) *gin.Engine {
 		// Public routes - No authentication required
 		public := api.Group("/auth")
 		{
-			public.POST("/register", ginAuthWrapper(handlers.Register))
-			public.POST("/login", ginAuthWrapper(handlers.Login))
+			public.POST("/register", handlers.Register) // LANGSUNG tanpa wrapper
+			public.POST("/login", handlers.Login)       // LANGSUNG tanpa wrapper
 		}
 
 		// Protected routes - Authentication required
 		protected := api.Group("")
-		protected.Use(middleware.GinAuthMiddleware()) // ← PAKAI GIN AUTH MIDDLEWARE
+		protected.Use(middleware.GinAuthMiddleware())
 		{
 			// User routes
-			protected.GET("/users", ginAuthWrapper(handlers.GetUsers))
-			protected.POST("/users", ginAuthWrapper(handlers.CreateUser))
-			protected.GET("/users/:id", ginAuthWrapper(handlers.GetUser))
+			protected.GET("/users", handlers.GetUsers)
+			protected.POST("/users", handlers.CreateUser)
+			protected.GET("/users/:id", handlers.GetUser)
 
-			// Profile routes - NEW
+			// Profile routes
 			protected.GET("/profile", handlers.GinGetProfile(userRepo))
 
 			// Task routes
-			protected.GET("/tasks", ginAuthWrapper(handlers.GetTasks))
-			protected.POST("/tasks", ginAuthWrapper(handlers.CreateTask))
-			protected.GET("/tasks/:id", ginAuthWrapper(handlers.GetTask))
-			protected.PUT("/tasks/:id", ginAuthWrapper(handlers.UpdateTask))
-			protected.DELETE("/tasks/:id", ginAuthWrapper(handlers.DeleteTask))
+			protected.GET("/tasks", handlers.GetTasks)
+			protected.POST("/tasks", handlers.CreateTask)
+			protected.GET("/tasks/:id", handlers.GetTask)
+			protected.PUT("/tasks/:id", handlers.UpdateTask)
+			protected.DELETE("/tasks/:id", handlers.DeleteTask)
 
-			// Attendance routes
-			protected.POST("/attendance/clock-in", ginAuthWrapper(handlers.ClockInHTTP))
-			protected.POST("/attendance/clock-out", ginAuthWrapper(handlers.ClockOutHTTP))
-			protected.POST("/attendance/check-location", ginAuthWrapper(handlers.CheckLocationHTTP))
-			protected.GET("/attendance", ginAuthWrapper(handlers.GetAttendanceHTTP))
+			// Attendance routes - GUNAKAN HANDLER GIN BARU
+			protected.POST("/attendance/clock-in", handlers.ClockIn)
+			protected.POST("/attendance/clock-out", handlers.ClockOut)
+			protected.POST("/attendance/check-location", handlers.CheckLocation)
+			protected.GET("/attendance", handlers.GetAttendance)
 		}
 	}
 
@@ -181,14 +181,6 @@ func setupGinRouter(userRepo *repository.UserRepository) *gin.Engine {
 
 	log.Println("✅ Gin routes registered successfully")
 	return router
-}
-
-// ginAuthWrapper converts existing HTTP handlers to Gin handlers
-func ginAuthWrapper(handler http.HandlerFunc) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		// Convert Gin context to HTTP request
-		handler(c.Writer, c.Request)
-	}
 }
 
 func ginHealthCheck(c *gin.Context) {
