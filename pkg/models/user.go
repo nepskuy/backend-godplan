@@ -5,49 +5,47 @@ import (
 )
 
 // User represents user data structure
-// @Description User information
 type User struct {
-	ID        int64     `json:"id" db:"id" example:"1"`
-	Username  string    `json:"username" db:"username" example:"johndoe"`
-	Email     string    `json:"email" db:"email" example:"john@example.com"`
+	ID        int64     `json:"id" db:"id"`
+	Username  string    `json:"username" db:"username"`
+	Email     string    `json:"email" db:"email"`
 	Password  string    `json:"-" db:"password"`
-	Role      string    `json:"role" db:"role" example:"employee"`
-	Name      string    `json:"full_name" db:"name" example:"John Doe"` // ← UBAH FullName MENJADI Name, db tag "name"
-	Phone     string    `json:"phone,omitempty" db:"phone" example:"+628123456789"`
-	AvatarURL string    `json:"avatar_url,omitempty" db:"avatar_url" example:"https://example.com/avatar.jpg"`
-	IsActive  bool      `json:"is_active" db:"is_active" example:"true"`
-	CreatedAt time.Time `json:"created_at" db:"created_at" example:"2023-10-01T00:00:00Z"`
-	UpdatedAt time.Time `json:"updated_at" db:"updated_at" example:"2023-10-01T00:00:00Z"`
+	Name      string    `json:"full_name,omitempty" db:"name"`
+	Role      string    `json:"role,omitempty" db:"role"`
+	Phone     string    `json:"phone,omitempty" db:"phone"`
+	AvatarURL string    `json:"avatar_url,omitempty" db:"avatar_url"`
+	IsActive  bool      `json:"is_active" db:"is_active"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 }
 
 // UserRegistrationRequest for register endpoint
 type UserRegistrationRequest struct {
-	Username string `json:"username" binding:"required" example:"johndoe"`
-	Email    string `json:"email" binding:"required" example:"john@example.com"`
-	Password string `json:"password" binding:"required" example:"password123"`
-	Name     string `json:"full_name" binding:"required" example:"John Doe"`
-	Phone    string `json:"phone,omitempty" example:"+628123456789"`
-	Role     string `json:"role,omitempty" example:"employee"`
+	Username string `json:"username" binding:"required"`
+	Email    string `json:"email" binding:"required"`
+	Password string `json:"password" binding:"required"`
+	Name     string `json:"full_name" binding:"required"`
+	Phone    string `json:"phone,omitempty"`
+	Role     string `json:"role,omitempty"`
 }
 
 // LoginRequest for login endpoint
 type LoginRequest struct {
-	Email    string `json:"email" binding:"required" example:"admin@godplan.com"`
-	Password string `json:"password" binding:"required" example:"password"`
+	Email    string `json:"email" binding:"required"`
+	Password string `json:"password" binding:"required"`
 }
 
 // Employee represents employee data structure
-// @Description Employee information
 type Employee struct {
-	ID             string    `json:"id" db:"id" example:"550e8400-e29b-41d4-a716-446655440000"`
-	UserID         string    `json:"user_id" db:"user_id" example:"550e8400-e29b-41d4-a716-446655440001"`
-	EmployeeID     string    `json:"employee_id" db:"employee_id" example:"EMP001"`
-	DepartmentID   string    `json:"department_id" db:"department_id" example:"550e8400-e29b-41d4-a716-446655440002"`
-	PositionID     string    `json:"position_id" db:"position_id" example:"550e8400-e29b-41d4-a716-446655440003"`
-	BaseSalary     float64   `json:"base_salary" db:"base_salary" example:"5000000.00"`
-	JoinDate       string    `json:"join_date" db:"join_date" example:"2023-01-15"`
-	EmploymentType string    `json:"employment_type" db:"employment_type" example:"full_time"`
-	WorkSchedule   string    `json:"work_schedule" db:"work_schedule" example:"9-to-5"`
-	CreatedAt      time.Time `json:"created_at" db:"created_at" example:"2023-10-01T00:00:00Z"`
-	UpdatedAt      time.Time `json:"updated_at" db:"updated_at" example:"2023-10-01T00:00:00Z"`
+	ID             int64     `json:"id" db:"id"`
+	UserID         int64     `json:"user_id" db:"user_id"`
+	EmployeeID     string    `json:"employee_id" db:"employee_id"`
+	DepartmentID   *int64    `json:"department_id,omitempty" db:"department_id"`
+	PositionID     *int64    `json:"position_id,omitempty" db:"position_id"`
+	BaseSalary     float64   `json:"base_salary" db:"base_salary"`
+	JoinDate       string    `json:"join_date" db:"join_date"`
+	EmploymentType string    `json:"employment_type" db:"employment_type"`
+	WorkSchedule   string    `json:"work_schedule" db:"work_schedule"`
+	CreatedAt      time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at" db:"updated_at"`
 }
