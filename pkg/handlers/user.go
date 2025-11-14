@@ -34,7 +34,6 @@ func GetUsers(c *gin.Context) {
 		return
 	}
 
-	// Query ke schema godplan - UPDATE: ganti full_name jadi name
 	rows, err := database.DB.Query(`
 		SELECT id, username, email, role, name, phone, avatar_url, is_active, created_at, updated_at 
 		FROM godplan.users 

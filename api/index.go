@@ -61,7 +61,7 @@ func setupGin() {
 	router.Use(gin.Recovery())
 	router.Use(middleware.GinCORS())
 	router.Use(middleware.GinLogging())
-	router.Use(middleware.GinDatabaseCheck()) // ← TAMBAHKAN DATABASE CHECK MIDDLEWARE
+	router.Use(middleware.GinDatabaseCheck())
 
 	log.Printf("🟢 Gin middleware registered")
 
@@ -78,7 +78,7 @@ func setupGin() {
 		c.Redirect(http.StatusFound, "/swagger")
 	})
 
-	// API Routes - UPDATE: HAPUS SEMUA ginAuthWrapper
+	// API Routes - HANYA YANG SUDAH ADA
 	api := router.Group("/api/v1")
 	{
 		// Public routes - No authentication required
@@ -92,6 +92,10 @@ func setupGin() {
 		protected := api.Group("")
 		protected.Use(middleware.GinAuthMiddleware())
 		{
+			// Dashboard routes
+			protected.GET("/dashboard/stats", handlers.GetDashboardStats)
+			protected.GET("/teams", handlers.GetTeamMembers)
+
 			// User routes
 			protected.GET("/users", handlers.GetUsers)
 			protected.POST("/users", handlers.CreateUser)
@@ -100,12 +104,10 @@ func setupGin() {
 			// Profile routes
 			protected.GET("/profile", handlers.GinGetProfile(userRepo))
 
-			// Task routes
+			// Task routes - MINIMAL UNTUK TESTING
 			protected.GET("/tasks", handlers.GetTasks)
 			protected.POST("/tasks", handlers.CreateTask)
-			protected.GET("/tasks/:id", handlers.GetTask)
-			protected.PUT("/tasks/:id", handlers.UpdateTask)
-			protected.DELETE("/tasks/:id", handlers.DeleteTask)
+			protected.GET("/tasks/upcoming", handlers.GetUpcomingTasks)
 
 			// Attendance routes
 			protected.POST("/attendance/clock-in", handlers.ClockIn)
@@ -129,9 +131,12 @@ func setupGin() {
 	log.Printf("   - GET  /swagger")
 	log.Printf("   - POST /api/v1/auth/register")
 	log.Printf("   - POST /api/v1/auth/login")
+	log.Printf("   - GET  /api/v1/dashboard/stats")
+	log.Printf("   - GET  /api/v1/teams")
 	log.Printf("   - GET  /api/v1/profile")
 	log.Printf("   - GET  /api/v1/tasks")
 	log.Printf("   - POST /api/v1/tasks")
+	log.Printf("   - GET  /api/v1/tasks/upcoming")
 	log.Printf("   - POST /api/v1/attendance/clock-in")
 	log.Printf("   - POST /api/v1/attendance/clock-out")
 }
@@ -319,6 +324,10 @@ func createEmbeddedSwaggerSpec() map[string]interface{} {
 				"url":         "https://be-godplan.godjahstudio.com",
 				"description": "Production server",
 			},
+			{
+				"url":         "/",
+				"description": "Current server",
+			},
 		},
 		"paths": map[string]interface{}{
 			"/api/v1/health": map[string]interface{}{
@@ -356,14 +365,14 @@ func createEmbeddedSwaggerSpec() map[string]interface{} {
 							"application/json": map[string]interface{}{
 								"schema": map[string]interface{}{
 									"type":     "object",
-									"required": []string{"username", "full_name", "email", "password"},
+									"required": []string{"username", "name", "email", "password"},
 									"properties": map[string]interface{}{
-										"username":  map[string]interface{}{"type": "string", "example": "johndoe"},
-										"full_name": map[string]interface{}{"type": "string", "example": "John Doe"},
-										"email":     map[string]interface{}{"type": "string", "example": "john@example.com"},
-										"password":  map[string]interface{}{"type": "string", "example": "password123"},
-										"phone":     map[string]interface{}{"type": "string", "example": "+628123456789"},
-										"role":      map[string]interface{}{"type": "string", "example": "employee"},
+										"username": map[string]interface{}{"type": "string", "example": "johndoe"},
+										"name":     map[string]interface{}{"type": "string", "example": "John Doe"},
+										"email":    map[string]interface{}{"type": "string", "example": "john@example.com"},
+										"password": map[string]interface{}{"type": "string", "example": "password123"},
+										"phone":    map[string]interface{}{"type": "string", "example": "+628123456789"},
+										"role":     map[string]interface{}{"type": "string", "example": "employee"},
 									},
 								},
 							},
@@ -390,7 +399,7 @@ func createEmbeddedSwaggerSpec() map[string]interface{} {
 															"username":  map[string]interface{}{"type": "string"},
 															"email":     map[string]interface{}{"type": "string"},
 															"role":      map[string]interface{}{"type": "string"},
-															"full_name": map[string]interface{}{"type": "string"},
+															"name":      map[string]interface{}{"type": "string"},
 															"phone":     map[string]interface{}{"type": "string"},
 															"is_active": map[string]interface{}{"type": "boolean"},
 														},
@@ -452,7 +461,7 @@ func createEmbeddedSwaggerSpec() map[string]interface{} {
 															"username":  map[string]interface{}{"type": "string"},
 															"email":     map[string]interface{}{"type": "string"},
 															"role":      map[string]interface{}{"type": "string"},
-															"full_name": map[string]interface{}{"type": "string"},
+															"name":      map[string]interface{}{"type": "string"},
 															"phone":     map[string]interface{}{"type": "string"},
 															"is_active": map[string]interface{}{"type": "boolean"},
 														},
@@ -469,6 +478,36 @@ func createEmbeddedSwaggerSpec() map[string]interface{} {
 						},
 						"401": map[string]interface{}{
 							"description": "Unauthorized",
+						},
+					},
+				},
+			},
+			"/api/v1/dashboard/stats": map[string]interface{}{
+				"get": map[string]interface{}{
+					"summary":     "Get dashboard statistics",
+					"description": "Get overview statistics for home dashboard",
+					"tags":        []string{"dashboard"},
+					"security": []map[string]interface{}{
+						{"bearerAuth": []string{}},
+					},
+					"responses": map[string]interface{}{
+						"200": map[string]interface{}{
+							"description": "Dashboard stats retrieved successfully",
+						},
+					},
+				},
+			},
+			"/api/v1/teams": map[string]interface{}{
+				"get": map[string]interface{}{
+					"summary":     "Get team members",
+					"description": "Get list of team members",
+					"tags":        []string{"dashboard"},
+					"security": []map[string]interface{}{
+						{"bearerAuth": []string{}},
+					},
+					"responses": map[string]interface{}{
+						"200": map[string]interface{}{
+							"description": "Team members retrieved successfully",
 						},
 					},
 				},
@@ -515,14 +554,14 @@ func createEmbeddedSwaggerSpec() map[string]interface{} {
 							"application/json": map[string]interface{}{
 								"schema": map[string]interface{}{
 									"type":     "object",
-									"required": []string{"username", "full_name", "email", "password"},
+									"required": []string{"username", "name", "email", "password"},
 									"properties": map[string]interface{}{
-										"username":  map[string]interface{}{"type": "string", "example": "johndoe"},
-										"full_name": map[string]interface{}{"type": "string", "example": "John Doe"},
-										"email":     map[string]interface{}{"type": "string", "example": "john@example.com"},
-										"password":  map[string]interface{}{"type": "string", "example": "password123"},
-										"phone":     map[string]interface{}{"type": "string", "example": "+628123456789"},
-										"role":      map[string]interface{}{"type": "string", "example": "employee"},
+										"username": map[string]interface{}{"type": "string", "example": "johndoe"},
+										"name":     map[string]interface{}{"type": "string", "example": "John Doe"},
+										"email":    map[string]interface{}{"type": "string", "example": "john@example.com"},
+										"password": map[string]interface{}{"type": "string", "example": "password123"},
+										"phone":    map[string]interface{}{"type": "string", "example": "+628123456789"},
+										"role":     map[string]interface{}{"type": "string", "example": "employee"},
 									},
 								},
 							},
@@ -561,19 +600,40 @@ func createEmbeddedSwaggerSpec() map[string]interface{} {
 						"content": map[string]interface{}{
 							"application/json": map[string]interface{}{
 								"schema": map[string]interface{}{
-									"type": "object",
+									"type":     "object",
+									"required": []string{"title"},
 									"properties": map[string]interface{}{
-										"title":       map[string]interface{}{"type": "string"},
-										"description": map[string]interface{}{"type": "string"},
-										"due_date":    map[string]interface{}{"type": "string", "format": "date-time"},
+										"title":           map[string]interface{}{"type": "string"},
+										"description":     map[string]interface{}{"type": "string"},
+										"due_date":        map[string]interface{}{"type": "string", "format": "date"},
+										"project_id":      map[string]interface{}{"type": "string"},
+										"assignee_id":     map[string]interface{}{"type": "string"},
+										"estimated_hours": map[string]interface{}{"type": "number"},
+										"status":          map[string]interface{}{"type": "string"},
+										"priority":        map[string]interface{}{"type": "string"},
 									},
 								},
 							},
 						},
 					},
 					"responses": map[string]interface{}{
-						"200": map[string]interface{}{
+						"201": map[string]interface{}{
 							"description": "Task created successfully",
+						},
+					},
+				},
+			},
+			"/api/v1/tasks/upcoming": map[string]interface{}{
+				"get": map[string]interface{}{
+					"summary":     "Get upcoming tasks",
+					"description": "Get upcoming tasks for dashboard (limit 5)",
+					"tags":        []string{"tasks"},
+					"security": []map[string]interface{}{
+						{"bearerAuth": []string{}},
+					},
+					"responses": map[string]interface{}{
+						"200": map[string]interface{}{
+							"description": "Upcoming tasks retrieved successfully",
 						},
 					},
 				},

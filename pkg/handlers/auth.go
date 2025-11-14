@@ -54,7 +54,7 @@ func Register(c *gin.Context) {
 	if req.Username == "" || req.Name == "" || req.Email == "" || req.Password == "" {
 		c.JSON(400, gin.H{
 			"success": false,
-			"error":   "Required fields: username, full_name, email, password",
+			"error":   "Required fields: username, name, email, password",
 		})
 		return
 	}

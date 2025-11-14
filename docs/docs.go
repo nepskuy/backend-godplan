@@ -734,10 +734,17 @@ const docTemplate = `{
                 "created_at": {
                     "type": "string"
                 },
+                "department": {
+                    "type": "string"
+                },
                 "email": {
                     "type": "string"
                 },
-                "full_name": {
+                "employee_id": {
+                    "description": "Employee fields",
+                    "type": "string"
+                },
+                "employment_type": {
                     "type": "string"
                 },
                 "id": {
@@ -746,16 +753,31 @@ const docTemplate = `{
                 "is_active": {
                     "type": "boolean"
                 },
+                "join_date": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
                 "phone": {
                     "type": "string"
                 },
+                "position": {
+                    "type": "string"
+                },
                 "role": {
+                    "type": "string"
+                },
+                "status": {
                     "type": "string"
                 },
                 "updated_at": {
                     "type": "string"
                 },
                 "username": {
+                    "type": "string"
+                },
+                "work_schedule": {
                     "type": "string"
                 }
             }
@@ -764,7 +786,7 @@ const docTemplate = `{
             "type": "object",
             "required": [
                 "email",
-                "full_name",
+                "name",
                 "password",
                 "username"
             ],
@@ -772,7 +794,7 @@ const docTemplate = `{
                 "email": {
                     "type": "string"
                 },
-                "full_name": {
+                "name": {
                     "type": "string"
                 },
                 "password": {

@@ -1,369 +1,500 @@
-package main
+package handlers
 
 import (
-	"fmt"
-	"log"
-	"net/http"
-	"os"
-	"time"
-
 	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
-	"github.com/nepskuy/be-godplan/pkg/config"
 	"github.com/nepskuy/be-godplan/pkg/database"
-	"github.com/nepskuy/be-godplan/pkg/handlers"
-	"github.com/nepskuy/be-godplan/pkg/middleware"
+	"github.com/nepskuy/be-godplan/pkg/models"
 	"github.com/nepskuy/be-godplan/pkg/repository"
+	"github.com/nepskuy/be-godplan/pkg/service"
+	"github.com/nepskuy/be-godplan/pkg/utils"
 )
 
-// @title GodPlan API
-// @version 1.0
-// @description Backend API for GodPlan application
-// @host localhost:8080
-// @BasePath /api/v1
-func main() {
-	log.Println("🚀 Starting GodPlan Backend Server with GIN...")
+var (
+	taskRepo    = repository.NewTaskRepository(database.GetDB())
+	taskService = service.NewTaskService(taskRepo)
+)
 
-	// Load .env file hanya di development
-	if config.IsDevelopment() {
-		if err := godotenv.Load(); err != nil {
-			log.Println("⚠️ No .env file found, using environment variables")
+// GetTasks godoc
+// @Summary Get all tasks for current user
+// @Description Get list of tasks assigned to the current user
+// @Tags tasks
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} utils.GinResponse
+// @Router /tasks [get]
+func GetTasks(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		utils.GinErrorResponse(c, 401, "Unauthorized")
+		return
+	}
+
+	// Cari employee_id berdasarkan user_id
+	var employeeID string
+	err := database.DB.QueryRow(`
+		SELECT id FROM godplan.employees WHERE user_id = $1
+	`, userID).Scan(&employeeID)
+
+	if err != nil {
+		// Jika tidak ada employee record, return empty array
+		utils.GinSuccessResponse(c, 200, "Tasks retrieved successfully", []models.Task{})
+		return
+	}
+
+	tasks, err := taskService.GetTasksByAssignee(employeeID)
+	if err != nil {
+		utils.GinErrorResponse(c, 500, "Failed to fetch tasks")
+		return
+	}
+
+	utils.GinSuccessResponse(c, 200, "Tasks retrieved successfully", tasks)
+}
+
+// CreateTask godoc
+// @Summary Create new task
+// @Description Create a new task for the current user
+// @Tags tasks
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body models.TaskRequest true "Task data"
+// @Success 201 {object} utils.GinResponse
+// @Router /tasks [post]
+func CreateTask(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		utils.GinErrorResponse(c, 401, "Unauthorized")
+		return
+	}
+
+	var taskReq models.TaskRequest
+	if err := c.ShouldBindJSON(&taskReq); err != nil {
+		utils.GinErrorResponse(c, 400, "Invalid request data")
+		return
+	}
+
+	// Validate required fields
+	if taskReq.Title == "" {
+		utils.GinErrorResponse(c, 400, "Task title is required")
+		return
+	}
+
+	// Jika assignee_id kosong, gunakan employee_id dari user yang login
+	if taskReq.AssigneeID == "" {
+		err := database.DB.QueryRow(`
+			SELECT id FROM godplan.employees WHERE user_id = $1
+		`, userID).Scan(&taskReq.AssigneeID)
+
+		if err != nil {
+			utils.GinErrorResponse(c, 400, "User doesn't have employee record")
+			return
+		}
+	}
+
+	task := &models.Task{
+		ProjectID:      taskReq.ProjectID,
+		AssigneeID:     taskReq.AssigneeID,
+		Title:          taskReq.Title,
+		Description:    taskReq.Description,
+		DueDate:        taskReq.DueDate,
+		EstimatedHours: taskReq.EstimatedHours,
+		ActualHours:    taskReq.ActualHours,
+		Progress:       taskReq.Progress,
+		Status:         taskReq.Status,
+		Priority:       taskReq.Priority,
+	}
+
+	err := taskService.CreateTask(task)
+	if err != nil {
+		utils.GinErrorResponse(c, 500, "Failed to create task")
+		return
+	}
+
+	utils.GinSuccessResponse(c, 201, "Task created successfully", task)
+}
+
+// GetTask godoc
+// @Summary Get task by ID
+// @Description Get a specific task by ID
+// @Tags tasks
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "Task ID"
+// @Success 200 {object} utils.GinResponse
+// @Router /tasks/{id} [get]
+func GetTask(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		utils.GinErrorResponse(c, 401, "Unauthorized")
+		return
+	}
+
+	taskID := c.Param("id")
+
+	// Cari employee_id berdasarkan user_id
+	var employeeID string
+	err := database.DB.QueryRow(`
+		SELECT id FROM godplan.employees WHERE user_id = $1
+	`, userID).Scan(&employeeID)
+
+	if err != nil {
+		utils.GinErrorResponse(c, 404, "Employee record not found")
+		return
+	}
+
+	// Validate task access
+	hasAccess, err := taskService.ValidateTaskAccess(taskID, employeeID)
+	if err != nil {
+		utils.GinErrorResponse(c, 404, "Task not found")
+		return
+	}
+
+	if !hasAccess {
+		utils.GinErrorResponse(c, 403, "Access denied to this task")
+		return
+	}
+
+	task, err := taskService.GetTaskByID(taskID)
+	if err != nil {
+		utils.GinErrorResponse(c, 404, "Task not found")
+		return
+	}
+
+	utils.GinSuccessResponse(c, 200, "Task retrieved successfully", task)
+}
+
+// UpdateTask godoc
+// @Summary Update task
+// @Description Update an existing task
+// @Tags tasks
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "Task ID"
+// @Param request body models.TaskRequest true "Task data"
+// @Success 200 {object} utils.GinResponse
+// @Router /tasks/{id} [put]
+func UpdateTask(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		utils.GinErrorResponse(c, 401, "Unauthorized")
+		return
+	}
+
+	taskID := c.Param("id")
+
+	// Cari employee_id berdasarkan user_id
+	var employeeID string
+	err := database.DB.QueryRow(`
+		SELECT id FROM godplan.employees WHERE user_id = $1
+	`, userID).Scan(&employeeID)
+
+	if err != nil {
+		utils.GinErrorResponse(c, 404, "Employee record not found")
+		return
+	}
+
+	// Validate task access
+	hasAccess, err := taskService.ValidateTaskAccess(taskID, employeeID)
+	if err != nil {
+		utils.GinErrorResponse(c, 404, "Task not found")
+		return
+	}
+
+	if !hasAccess {
+		utils.GinErrorResponse(c, 403, "Access denied to this task")
+		return
+	}
+
+	var taskReq models.TaskRequest
+	if err := c.ShouldBindJSON(&taskReq); err != nil {
+		utils.GinErrorResponse(c, 400, "Invalid request data")
+		return
+	}
+
+	// Get existing task
+	existingTask, err := taskService.GetTaskByID(taskID)
+	if err != nil {
+		utils.GinErrorResponse(c, 404, "Task not found")
+		return
+	}
+
+	// Update task fields
+	existingTask.ProjectID = taskReq.ProjectID
+	existingTask.AssigneeID = taskReq.AssigneeID
+	existingTask.Title = taskReq.Title
+	existingTask.Description = taskReq.Description
+	existingTask.DueDate = taskReq.DueDate
+	existingTask.EstimatedHours = taskReq.EstimatedHours
+	existingTask.ActualHours = taskReq.ActualHours
+	existingTask.Progress = taskReq.Progress
+	existingTask.Status = taskReq.Status
+	existingTask.Priority = taskReq.Priority
+
+	err = taskService.UpdateTask(existingTask)
+	if err != nil {
+		utils.GinErrorResponse(c, 500, "Failed to update task")
+		return
+	}
+
+	utils.GinSuccessResponse(c, 200, "Task updated successfully", existingTask)
+}
+
+// DeleteTask godoc
+// @Summary Delete task
+// @Description Delete a task by ID
+// @Tags tasks
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "Task ID"
+// @Success 200 {object} utils.GinResponse
+// @Router /tasks/{id} [delete]
+func DeleteTask(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		utils.GinErrorResponse(c, 401, "Unauthorized")
+		return
+	}
+
+	taskID := c.Param("id")
+
+	// Cari employee_id berdasarkan user_id
+	var employeeID string
+	err := database.DB.QueryRow(`
+		SELECT id FROM godplan.employees WHERE user_id = $1
+	`, userID).Scan(&employeeID)
+
+	if err != nil {
+		utils.GinErrorResponse(c, 404, "Employee record not found")
+		return
+	}
+
+	// Validate task access
+	hasAccess, err := taskService.ValidateTaskAccess(taskID, employeeID)
+	if err != nil {
+		utils.GinErrorResponse(c, 404, "Task not found")
+		return
+	}
+
+	if !hasAccess {
+		utils.GinErrorResponse(c, 403, "Access denied to this task")
+		return
+	}
+
+	err = taskService.DeleteTask(taskID)
+	if err != nil {
+		if err == repository.ErrTaskNotFound {
+			utils.GinErrorResponse(c, 404, "Task not found")
 		} else {
-			log.Println("✅ .env file loaded")
+			utils.GinErrorResponse(c, 500, "Failed to delete task")
 		}
+		return
 	}
 
-	cfg := config.Load()
-
-	log.Println("🔌 Connecting to database...")
-
-	// Debug info untuk DATABASE_URL
-	if cfg.DatabaseURL != "" {
-		log.Println("✅ DATABASE_URL is available")
-		maskedURL := maskPassword(cfg.DatabaseURL)
-		log.Printf("📝 Using DATABASE_URL: %s", maskedURL)
-	} else {
-		log.Println("⚠️ DATABASE_URL not found, using individual DB config")
-		log.Printf("📝 DB Host: %s, Port: %s, User: %s, Name: %s",
-			cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBName)
-	}
-
-	if err := database.InitDB(); err != nil {
-		log.Fatalf("❌ Failed to connect to database: %v", err)
-	}
-	log.Println("✅ Database connected successfully")
-
-	if err := database.HealthCheck(); err != nil {
-		log.Printf("⚠️ Database health check warning: %v", err)
-	} else {
-		log.Println("✅ Database health check passed")
-	}
-
-	// Setup repository
-	db := database.GetDB()
-	userRepo := repository.NewUserRepository(db)
-
-	// Setup Gin router
-	router := setupGinRouter(userRepo)
-
-	port := cfg.ServerPort
-	if port == "" {
-		port = "8080"
-	}
-
-	addr := fmt.Sprintf(":%s", port)
-
-	// Log environment info
-	env := "development"
-	if config.IsProduction() {
-		env = "production"
-	}
-
-	log.Printf("🌐 Server starting in %s mode", env)
-	log.Printf("📍 Listening on http://localhost%s", addr)
-	log.Printf("📚 Swagger UI available at http://localhost%s/swagger", addr)
-	log.Printf("🏥 Health check at http://localhost%s/health", addr)
-
-	server := &http.Server{
-		Addr:         addr,
-		Handler:      router,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
-	}
-
-	log.Println("✨ Server is ready to accept connections!")
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("❌ Server failed to start: %v", err)
-	}
+	utils.GinSuccessResponse(c, 200, "Task deleted successfully", nil)
 }
 
-func setupGinRouter(userRepo *repository.UserRepository) *gin.Engine {
-	// Set Gin mode
-	if config.IsProduction() {
-		gin.SetMode(gin.ReleaseMode)
+// GetUpcomingTasks godoc
+// @Summary Get upcoming tasks
+// @Description Get upcoming tasks for dashboard (limit 5)
+// @Tags tasks
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} utils.GinResponse
+// @Router /tasks/upcoming [get]
+func GetUpcomingTasks(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		utils.GinErrorResponse(c, 401, "Unauthorized")
+		return
 	}
 
-	router := gin.New()
+	// Cari employee_id berdasarkan user_id
+	var employeeID string
+	err := database.DB.QueryRow(`
+		SELECT id FROM godplan.employees WHERE user_id = $1
+	`, userID).Scan(&employeeID)
 
-	log.Println("🔧 Setting up Gin middleware...")
-
-	// Apply middleware
-	router.Use(gin.Recovery())
-	router.Use(middleware.GinCORS())
-	router.Use(middleware.GinLogging())
-	router.Use(middleware.GinDatabaseCheck()) // ← TAMBAHKAN DATABASE CHECK
-
-	log.Println("✅ Gin middleware registered")
-
-	log.Println("🔧 Setting up routes...")
-
-	// Health check routes
-	router.GET("/health", ginHealthCheck)
-	router.GET("/api/v1/health", ginHealthCheck)
-
-	// Swagger routes
-	router.GET("/swagger", ginSwaggerHandler)
-	router.GET("/swagger/*any", ginSwaggerRedirectHandler)
-	router.GET("/swagger.json", ginSwaggerJSONHandler)
-	router.GET("/swagger.yaml", ginSwaggerYAMLHandler)
-
-	// Root redirect to Swagger
-	router.GET("/", func(c *gin.Context) {
-		c.Redirect(http.StatusFound, "/swagger")
-	})
-
-	// API Routes
-	api := router.Group("/api/v1")
-	{
-		// Public routes - No authentication required
-		public := api.Group("/auth")
-		{
-			public.POST("/register", handlers.Register)
-			public.POST("/login", handlers.Login)
-		}
-
-		// Protected routes - Authentication required
-		protected := api.Group("")
-		protected.Use(middleware.GinAuthMiddleware())
-		{
-			// User routes
-			protected.GET("/users", handlers.GetUsers)
-			protected.POST("/users", handlers.CreateUser)
-			protected.GET("/users/:id", handlers.GetUser)
-
-			// Profile routes
-			protected.GET("/profile", handlers.GinGetProfile(userRepo))
-
-			// Task routes
-			protected.GET("/tasks", handlers.GetTasks)
-			protected.POST("/tasks", handlers.CreateTask)
-			protected.GET("/tasks/:id", handlers.GetTask)
-			protected.PUT("/tasks/:id", handlers.UpdateTask)
-			protected.DELETE("/tasks/:id", handlers.DeleteTask)
-
-			// Attendance routes
-			protected.POST("/attendance/clock-in", handlers.ClockIn)
-			protected.POST("/attendance/clock-out", handlers.ClockOut)
-			protected.POST("/attendance/check-location", handlers.CheckLocation)
-			protected.GET("/attendance", handlers.GetAttendance)
-		}
-	}
-
-	// 404 handler
-	router.NoRoute(func(c *gin.Context) {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error":   true,
-			"message": "Route not found: " + c.Request.URL.Path,
-		})
-	})
-
-	log.Println("✅ Gin routes registered successfully")
-	return router
-}
-
-func ginHealthCheck(c *gin.Context) {
-	dbStatus := "connected"
-	if err := database.HealthCheck(); err != nil {
-		dbStatus = "disconnected"
-		log.Printf("❌ Database health check failed: %v", err)
-	}
-
-	platform := "local"
-	if os.Getenv("VERCEL") != "" {
-		platform = "vercel"
-	}
-
-	cfg := config.Load()
-
-	c.JSON(http.StatusOK, gin.H{
-		"status":       "ok",
-		"service":      "godplan-backend",
-		"database":     dbStatus,
-		"environment":  platform,
-		"timestamp":    time.Now().Format(time.RFC3339),
-		"version":      "1.0.0",
-		"using_db_url": cfg.DatabaseURL != "",
-	})
-}
-
-// ginSwaggerJSONHandler handles swagger.json request
-func ginSwaggerJSONHandler(c *gin.Context) {
-	// Coba baca file swagger.json dari root directory
-	data, err := os.ReadFile("./docs/swagger.json")
 	if err != nil {
-		// Fallback: coba baca dari path relative
-		data, err = os.ReadFile("docs/swagger.json")
-		if err != nil {
-			log.Printf("❌ Failed to read swagger.json: %v", err)
-			c.JSON(404, gin.H{
-				"error":   true,
-				"message": "swagger.json not found",
-			})
-			return
-		}
+		// Jika tidak ada employee record, return empty array
+		utils.GinSuccessResponse(c, 200, "Upcoming tasks retrieved successfully", []models.UpcomingTask{})
+		return
 	}
 
-	c.Data(200, "application/json", data)
-}
-
-// ginSwaggerYAMLHandler handles swagger.yaml request
-func ginSwaggerYAMLHandler(c *gin.Context) {
-	// Coba baca file swagger.yaml dari root directory
-	data, err := os.ReadFile("./docs/swagger.yaml")
+	tasks, err := taskService.GetUpcomingTasks(employeeID, 5)
 	if err != nil {
-		// Fallback: coba baca dari path relative
-		data, err = os.ReadFile("docs/swagger.yaml")
-		if err != nil {
-			log.Printf("❌ Failed to read swagger.yaml: %v", err)
-			c.JSON(404, gin.H{
-				"error":   true,
-				"message": "swagger.yaml not found",
-			})
-			return
-		}
+		utils.GinErrorResponse(c, 500, "Failed to fetch upcoming tasks")
+		return
 	}
 
-	c.Data(200, "application/yaml", data)
+	utils.GinSuccessResponse(c, 200, "Upcoming tasks retrieved successfully", tasks)
 }
 
-// ginSwaggerRedirectHandler handles other Swagger UI routes
-func ginSwaggerRedirectHandler(c *gin.Context) {
-	c.Redirect(http.StatusFound, "/swagger")
-}
-
-func ginSwaggerHandler(c *gin.Context) {
-	c.Header("Content-Type", "text/html")
-	c.String(http.StatusOK, `<!DOCTYPE html>
-<html>
-<head>
-    <title>GodPlan API Documentation</title>
-    <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5.9.0/swagger-ui.css">
-    <link rel="icon" type="image/png" href="https://unpkg.com/swagger-ui-dist@5.9.0/favicon-32x32.png" sizes="32x32" />
-    <link rel="icon" type="image/png" href="https://unpkg.com/swagger-ui-dist@5.9.0/favicon-16x16.png" sizes="16x16" />
-    <style>
-        html {
-            box-sizing: border-box;
-            overflow: -moz-scrollbars-vertical;
-            overflow-y: scroll;
-        }
-        *,
-        *:before,
-        *:after {
-            box-sizing: inherit;
-        }
-        body {
-            margin: 0;
-            background: #fafafa;
-        }
-        .swagger-ui .topbar {
-            background-color: #2c3e50;
-            padding: 10px 0;
-        }
-    </style>
-</head>
-<body>
-    <div id="swagger-ui"></div>
-    <script src="https://unpkg.com/swagger-ui-dist@5.9.0/swagger-ui-bundle.js"></script>
-    <script src="https://unpkg.com/swagger-ui-dist@5.9.0/swagger-ui-standalone-preset.js"></script>
-    <script>
-        window.onload = function() {
-            const ui = SwaggerUIBundle({
-                url: '/swagger.json',
-                dom_id: '#swagger-ui',
-                deepLinking: true,
-                presets: [
-                    SwaggerUIBundle.presets.apis,
-                    SwaggerUIStandalonePreset
-                ],
-                plugins: [
-                    SwaggerUIBundle.plugins.DownloadUrl
-                ],
-                layout: "StandaloneLayout",
-                validatorUrl: null,
-                defaultModelsExpandDepth: -1,
-                operationsSorter: "alpha",
-                tagsSorter: "alpha",
-                docExpansion: "none"
-            });
-            
-            fetch('/swagger.json')
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Swagger JSON not found');
-                    }
-                    return response.json();
-                })
-                .catch(error => {
-                    document.getElementById('swagger-ui').innerHTML = 
-                        '<div style="padding: 20px; text-align: center; color: red;">' +
-                        '<h2>Error Loading Swagger Documentation</h2>' +
-                        '<p>' + error.message + '</p>' +
-                        '<p>Please check if swagger.json exists and is properly generated.</p>' +
-                        '</div>';
-                });
-        }
-    </script>
-</body>
-</html>`)
-}
-
-func maskPassword(connStr string) string {
-	// Mask password dalam connection string
-	for _, prefix := range []string{"password=", "Password="} {
-		if idx := findIndex(connStr, prefix); idx != -1 {
-			end := findNextSeparator(connStr, idx+len(prefix))
-			return connStr[:idx+len(prefix)] + "****" + connStr[end:]
-		}
+// UpdateTaskProgress godoc
+// @Summary Update task progress
+// @Description Update progress of a specific task
+// @Tags tasks
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "Task ID"
+// @Param request body map[string]interface{} true "Progress data"
+// @Success 200 {object} utils.GinResponse
+// @Router /tasks/{id}/progress [patch]
+func UpdateTaskProgress(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		utils.GinErrorResponse(c, 401, "Unauthorized")
+		return
 	}
 
-	// Mask password dalam URL format (postgres://user:pass@host)
-	if idx := findIndex(connStr, "://"); idx != -1 {
-		if idx2 := findIndex(connStr[idx+3:], "@"); idx2 != -1 {
-			start := idx + 3
-			end := start + idx2
-			if colonIdx := findIndex(connStr[start:end], ":"); colonIdx != -1 {
-				return connStr[:start+colonIdx+1] + "****" + connStr[end:]
-			}
-		}
+	taskID := c.Param("id")
+
+	// Cari employee_id berdasarkan user_id
+	var employeeID string
+	err := database.DB.QueryRow(`
+		SELECT id FROM godplan.employees WHERE user_id = $1
+	`, userID).Scan(&employeeID)
+
+	if err != nil {
+		utils.GinErrorResponse(c, 404, "Employee record not found")
+		return
 	}
-	return connStr
+
+	// Validate task access
+	hasAccess, err := taskService.ValidateTaskAccess(taskID, employeeID)
+	if err != nil {
+		utils.GinErrorResponse(c, 404, "Task not found")
+		return
+	}
+
+	if !hasAccess {
+		utils.GinErrorResponse(c, 403, "Access denied to this task")
+		return
+	}
+
+	var progressReq struct {
+		Progress int `json:"progress" binding:"required,min=0,max=100"`
+	}
+
+	if err := c.ShouldBindJSON(&progressReq); err != nil {
+		utils.GinErrorResponse(c, 400, "Invalid progress value")
+		return
+	}
+
+	err = taskService.UpdateTaskProgress(taskID, progressReq.Progress)
+	if err != nil {
+		if err == repository.ErrInvalidProgress {
+			utils.GinErrorResponse(c, 400, "Progress must be between 0 and 100")
+		} else {
+			utils.GinErrorResponse(c, 500, "Failed to update task progress")
+		}
+		return
+	}
+
+	task, err := taskService.GetTaskByID(taskID)
+	if err != nil {
+		utils.GinErrorResponse(c, 500, "Progress updated but failed to retrieve task")
+		return
+	}
+
+	utils.GinSuccessResponse(c, 200, "Task progress updated successfully", task)
 }
 
-func findIndex(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
+// CompleteTask godoc
+// @Summary Complete task
+// @Description Mark a task as completed
+// @Tags tasks
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "Task ID"
+// @Success 200 {object} utils.GinResponse
+// @Router /tasks/{id}/complete [patch]
+func CompleteTask(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		utils.GinErrorResponse(c, 401, "Unauthorized")
+		return
 	}
-	return -1
+
+	taskID := c.Param("id")
+
+	// Cari employee_id berdasarkan user_id
+	var employeeID string
+	err := database.DB.QueryRow(`
+		SELECT id FROM godplan.employees WHERE user_id = $1
+	`, userID).Scan(&employeeID)
+
+	if err != nil {
+		utils.GinErrorResponse(c, 404, "Employee record not found")
+		return
+	}
+
+	// Validate task access
+	hasAccess, err := taskService.ValidateTaskAccess(taskID, employeeID)
+	if err != nil {
+		utils.GinErrorResponse(c, 404, "Task not found")
+		return
+	}
+
+	if !hasAccess {
+		utils.GinErrorResponse(c, 403, "Access denied to this task")
+		return
+	}
+
+	err = taskService.CompleteTask(taskID)
+	if err != nil {
+		utils.GinErrorResponse(c, 500, "Failed to complete task")
+		return
+	}
+
+	task, err := taskService.GetTaskByID(taskID)
+	if err != nil {
+		utils.GinErrorResponse(c, 500, "Task completed but failed to retrieve")
+		return
+	}
+
+	utils.GinSuccessResponse(c, 200, "Task completed successfully", task)
 }
 
-func findNextSeparator(s string, start int) int {
-	for i := start; i < len(s); i++ {
-		if s[i] == ' ' || s[i] == '&' || s[i] == '?' || s[i] == '#' {
-			return i
-		}
+// GetTaskStatistics godoc
+// @Summary Get task statistics
+// @Description Get task statistics for current user
+// @Tags tasks
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} utils.GinResponse
+// @Router /tasks/statistics [get]
+func GetTaskStatistics(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		utils.GinErrorResponse(c, 401, "Unauthorized")
+		return
 	}
-	return len(s)
+
+	// Cari employee_id berdasarkan user_id
+	var employeeID string
+	err := database.DB.QueryRow(`
+		SELECT id FROM godplan.employees WHERE user_id = $1
+	`, userID).Scan(&employeeID)
+
+	if err != nil {
+		// Jika tidak ada employee record, return empty statistics
+		utils.GinSuccessResponse(c, 200, "Task statistics retrieved successfully", models.TaskStatistics{})
+		return
+	}
+
+	statistics, err := taskService.GetTaskStatistics(employeeID)
+	if err != nil {
+		utils.GinErrorResponse(c, 500, "Failed to fetch task statistics")
+		return
+	}
+
+	utils.GinSuccessResponse(c, 200, "Task statistics retrieved successfully", statistics)
 }
