@@ -1,6 +1,8 @@
 package service
 
 import (
+	"strings"
+
 	"github.com/nepskuy/be-godplan/pkg/models"
 	"github.com/nepskuy/be-godplan/pkg/repository"
 )
@@ -179,35 +181,11 @@ func (s *TaskService) SearchTasks(assigneeID string, query string) ([]models.Tas
 
 // Helper function for case-insensitive search
 func containsIgnoreCase(s, substr string) bool {
-	// Simple implementation - for production use strings.Contains with strings.ToLower
-	if len(s) < len(substr) {
-		return false
+	if len(substr) == 0 {
+		return true
 	}
 
-	// This is a basic implementation. For better performance, use proper string matching
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if stringsEqualIgnoreCase(s[i:i+len(substr)], substr) {
-			return true
-		}
-	}
-	return false
-}
-
-func stringsEqualIgnoreCase(s1, s2 string) bool {
-	if len(s1) != len(s2) {
-		return false
-	}
-	for i := 0; i < len(s1); i++ {
-		if toLower(s1[i]) != toLower(s2[i]) {
-			return false
-		}
-	}
-	return true
-}
-
-func toLower(b byte) byte {
-	if b >= 'A' && b <= 'Z' {
-		return b + 32
-	}
-	return b
+	sLower := strings.ToLower(s)
+	substrLower := strings.ToLower(substr)
+	return strings.Contains(sLower, substrLower)
 }

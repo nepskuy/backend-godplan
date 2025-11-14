@@ -269,3 +269,54 @@ func (r *TaskRepository) ValidateTaskAccess(taskID string, assigneeID string) (b
 
 	return count > 0, nil
 }
+
+// UpdateTaskProgress - Update only task progress
+func (r *TaskRepository) UpdateTaskProgress(taskID string, progress int) error {
+	query := `UPDATE godplan.tasks 
+		SET progress = $1, updated_at = CURRENT_TIMESTAMP 
+		WHERE id = $2`
+
+	_, err := r.db.Exec(query, progress, taskID)
+	if err != nil {
+		return utils.ErrInternalServer
+	}
+	return nil
+}
+
+// CompleteTask - Mark task as completed
+func (r *TaskRepository) CompleteTask(taskID string) error {
+	query := `UPDATE godplan.tasks 
+		SET status = 'completed', progress = 100, updated_at = CURRENT_TIMESTAMP 
+		WHERE id = $1`
+
+	_, err := r.db.Exec(query, taskID)
+	if err != nil {
+		return utils.ErrInternalServer
+	}
+	return nil
+}
+
+// GetTaskStatistics - Get task statistics for dashboard
+func (r *TaskRepository) GetTaskStatistics(assigneeID string) (*models.TaskStatistics, error) {
+	totalTasks, completedTasks, err := r.GetTaskCountByAssignee(assigneeID)
+	if err != nil {
+		return nil, err
+	}
+
+	pendingTasks, err := r.GetPendingTasksCount(assigneeID)
+	if err != nil {
+		return nil, err
+	}
+
+	var completionRate int
+	if totalTasks > 0 {
+		completionRate = (completedTasks * 100) / totalTasks
+	}
+
+	return &models.TaskStatistics{
+		TotalTasks:     totalTasks,
+		CompletedTasks: completedTasks,
+		PendingTasks:   pendingTasks,
+		CompletionRate: completionRate,
+	}, nil
+}

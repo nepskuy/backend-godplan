@@ -1,4 +1,3 @@
-// Di pkg/handlers/task.go - update untuk pakai service
 package handlers
 
 import (
@@ -243,6 +242,61 @@ func UpdateTask(c *gin.Context) {
 	utils.GinSuccessResponse(c, 200, "Task updated successfully", existingTask)
 }
 
+// DeleteTask godoc
+// @Summary Delete task
+// @Description Delete a task by ID
+// @Tags tasks
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "Task ID"
+// @Success 200 {object} utils.GinResponse
+// @Router /tasks/{id} [delete]
+func DeleteTask(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		utils.GinErrorResponse(c, 401, "Unauthorized")
+		return
+	}
+
+	taskID := c.Param("id")
+
+	// Cari employee_id berdasarkan user_id
+	var employeeID string
+	err := database.DB.QueryRow(`
+		SELECT id FROM godplan.employees WHERE user_id = $1
+	`, userID).Scan(&employeeID)
+
+	if err != nil {
+		utils.GinErrorResponse(c, 404, "Employee record not found")
+		return
+	}
+
+	// Validate task access
+	hasAccess, err := taskService.ValidateTaskAccess(taskID, employeeID)
+	if err != nil {
+		utils.GinErrorResponse(c, 404, "Task not found")
+		return
+	}
+
+	if !hasAccess {
+		utils.GinErrorResponse(c, 403, "Access denied to this task")
+		return
+	}
+
+	err = taskService.DeleteTask(taskID)
+	if err != nil {
+		if err == repository.ErrTaskNotFound {
+			utils.GinErrorResponse(c, 404, "Task not found")
+		} else {
+			utils.GinErrorResponse(c, 500, "Failed to delete task")
+		}
+		return
+	}
+
+	utils.GinSuccessResponse(c, 200, "Task deleted successfully", nil)
+}
+
 // GetUpcomingTasks godoc
 // @Summary Get upcoming tasks
 // @Description Get upcoming tasks for dashboard (limit 5)
@@ -278,4 +332,169 @@ func GetUpcomingTasks(c *gin.Context) {
 	}
 
 	utils.GinSuccessResponse(c, 200, "Upcoming tasks retrieved successfully", tasks)
+}
+
+// UpdateTaskProgress godoc
+// @Summary Update task progress
+// @Description Update progress of a specific task
+// @Tags tasks
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "Task ID"
+// @Param request body map[string]interface{} true "Progress data"
+// @Success 200 {object} utils.GinResponse
+// @Router /tasks/{id}/progress [patch]
+func UpdateTaskProgress(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		utils.GinErrorResponse(c, 401, "Unauthorized")
+		return
+	}
+
+	taskID := c.Param("id")
+
+	// Cari employee_id berdasarkan user_id
+	var employeeID string
+	err := database.DB.QueryRow(`
+		SELECT id FROM godplan.employees WHERE user_id = $1
+	`, userID).Scan(&employeeID)
+
+	if err != nil {
+		utils.GinErrorResponse(c, 404, "Employee record not found")
+		return
+	}
+
+	// Validate task access
+	hasAccess, err := taskService.ValidateTaskAccess(taskID, employeeID)
+	if err != nil {
+		utils.GinErrorResponse(c, 404, "Task not found")
+		return
+	}
+
+	if !hasAccess {
+		utils.GinErrorResponse(c, 403, "Access denied to this task")
+		return
+	}
+
+	var progressReq struct {
+		Progress int `json:"progress" binding:"required,min=0,max=100"`
+	}
+
+	if err := c.ShouldBindJSON(&progressReq); err != nil {
+		utils.GinErrorResponse(c, 400, "Invalid progress value")
+		return
+	}
+
+	err = taskService.UpdateTaskProgress(taskID, progressReq.Progress)
+	if err != nil {
+		if err == repository.ErrInvalidProgress {
+			utils.GinErrorResponse(c, 400, "Progress must be between 0 and 100")
+		} else {
+			utils.GinErrorResponse(c, 500, "Failed to update task progress")
+		}
+		return
+	}
+
+	task, err := taskService.GetTaskByID(taskID)
+	if err != nil {
+		utils.GinErrorResponse(c, 500, "Progress updated but failed to retrieve task")
+		return
+	}
+
+	utils.GinSuccessResponse(c, 200, "Task progress updated successfully", task)
+}
+
+// CompleteTask godoc
+// @Summary Complete task
+// @Description Mark a task as completed
+// @Tags tasks
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "Task ID"
+// @Success 200 {object} utils.GinResponse
+// @Router /tasks/{id}/complete [patch]
+func CompleteTask(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		utils.GinErrorResponse(c, 401, "Unauthorized")
+		return
+	}
+
+	taskID := c.Param("id")
+
+	// Cari employee_id berdasarkan user_id
+	var employeeID string
+	err := database.DB.QueryRow(`
+		SELECT id FROM godplan.employees WHERE user_id = $1
+	`, userID).Scan(&employeeID)
+
+	if err != nil {
+		utils.GinErrorResponse(c, 404, "Employee record not found")
+		return
+	}
+
+	// Validate task access
+	hasAccess, err := taskService.ValidateTaskAccess(taskID, employeeID)
+	if err != nil {
+		utils.GinErrorResponse(c, 404, "Task not found")
+		return
+	}
+
+	if !hasAccess {
+		utils.GinErrorResponse(c, 403, "Access denied to this task")
+		return
+	}
+
+	err = taskService.CompleteTask(taskID)
+	if err != nil {
+		utils.GinErrorResponse(c, 500, "Failed to complete task")
+		return
+	}
+
+	task, err := taskService.GetTaskByID(taskID)
+	if err != nil {
+		utils.GinErrorResponse(c, 500, "Task completed but failed to retrieve")
+		return
+	}
+
+	utils.GinSuccessResponse(c, 200, "Task completed successfully", task)
+}
+
+// GetTaskStatistics godoc
+// @Summary Get task statistics
+// @Description Get task statistics for current user
+// @Tags tasks
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} utils.GinResponse
+// @Router /tasks/statistics [get]
+func GetTaskStatistics(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		utils.GinErrorResponse(c, 401, "Unauthorized")
+		return
+	}
+
+	// Cari employee_id berdasarkan user_id
+	var employeeID string
+	err := database.DB.QueryRow(`
+		SELECT id FROM godplan.employees WHERE user_id = $1
+	`, userID).Scan(&employeeID)
+
+	if err != nil {
+		// Jika tidak ada employee record, return empty statistics
+		utils.GinSuccessResponse(c, 200, "Task statistics retrieved successfully", models.TaskStatistics{})
+		return
+	}
+
+	statistics, err := taskService.GetTaskStatistics(employeeID)
+	if err != nil {
+		utils.GinErrorResponse(c, 500, "Failed to fetch task statistics")
+		return
+	}
+
+	utils.GinSuccessResponse(c, 200, "Task statistics retrieved successfully", statistics)
 }

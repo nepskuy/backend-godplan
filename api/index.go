@@ -78,7 +78,7 @@ func setupGin() {
 		c.Redirect(http.StatusFound, "/swagger")
 	})
 
-	// API Routes - HANYA YANG SUDAH ADA
+	// API Routes - UPDATE: LENGKAPI SEMUA ROUTES
 	api := router.Group("/api/v1")
 	{
 		// Public routes - No authentication required
@@ -104,10 +104,16 @@ func setupGin() {
 			// Profile routes
 			protected.GET("/profile", handlers.GinGetProfile(userRepo))
 
-			// Task routes - MINIMAL UNTUK TESTING
+			// Task routes - UPDATE: LENGKAPI DENGAN SEMUA HANDLER
 			protected.GET("/tasks", handlers.GetTasks)
 			protected.POST("/tasks", handlers.CreateTask)
+			protected.GET("/tasks/:id", handlers.GetTask)
+			protected.PUT("/tasks/:id", handlers.UpdateTask)
+			protected.DELETE("/tasks/:id", handlers.DeleteTask)
 			protected.GET("/tasks/upcoming", handlers.GetUpcomingTasks)
+			protected.PATCH("/tasks/:id/progress", handlers.UpdateTaskProgress)
+			protected.PATCH("/tasks/:id/complete", handlers.CompleteTask)
+			protected.GET("/tasks/statistics", handlers.GetTaskStatistics)
 
 			// Attendance routes
 			protected.POST("/attendance/clock-in", handlers.ClockIn)
@@ -136,7 +142,13 @@ func setupGin() {
 	log.Printf("   - GET  /api/v1/profile")
 	log.Printf("   - GET  /api/v1/tasks")
 	log.Printf("   - POST /api/v1/tasks")
+	log.Printf("   - GET  /api/v1/tasks/:id")
+	log.Printf("   - PUT  /api/v1/tasks/:id")
+	log.Printf("   - DELETE /api/v1/tasks/:id")
 	log.Printf("   - GET  /api/v1/tasks/upcoming")
+	log.Printf("   - PATCH /api/v1/tasks/:id/progress")
+	log.Printf("   - PATCH /api/v1/tasks/:id/complete")
+	log.Printf("   - GET  /api/v1/tasks/statistics")
 	log.Printf("   - POST /api/v1/attendance/clock-in")
 	log.Printf("   - POST /api/v1/attendance/clock-out")
 }
