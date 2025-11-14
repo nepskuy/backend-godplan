@@ -50,7 +50,7 @@ func Register(c *gin.Context) {
 		return
 	}
 
-	// Required fields validation - UPDATE: ganti FullName jadi Name
+	// Required fields validation
 	if req.Username == "" || req.Name == "" || req.Email == "" || req.Password == "" {
 		c.JSON(400, gin.H{
 			"success": false,
@@ -77,8 +77,8 @@ func Register(c *gin.Context) {
 
 	// DEBUG: Print received data
 	if config.IsDevelopment() {
-		fmt.Printf("📥 REGISTER ATTEMPT - Username: %s, Email: %s, Name: %s\n",
-			req.Username, req.Email, req.Name)
+		fmt.Printf("📥 REGISTER ATTEMPT - Username: %s, Email: %s, Name: %s, Role: %s\n",
+			req.Username, req.Email, req.Name, req.Role)
 	}
 
 	// Hash password
@@ -113,7 +113,7 @@ func Register(c *gin.Context) {
 		req.Email,
 		string(hashedPassword),
 		req.Role,
-		req.Name, // ← UPDATE: req.FullName jadi req.Name
+		req.Name,
 		req.Phone,
 		"",   // avatar_url kosong
 		true, // is_active
@@ -148,6 +148,39 @@ func Register(c *gin.Context) {
 		return
 	}
 
+	// ✅ AUTO-CREATE EMPLOYEE RECORD FOR EMPLOYEE ROLE
+	if req.Role == "employee" {
+		employeeID := fmt.Sprintf("EMP%04d", userID)
+		if config.IsDevelopment() {
+			fmt.Printf("👨‍💼 Creating employee record - UserID: %d, EmployeeID: %s\n", userID, employeeID)
+		}
+
+		_, err = database.DB.ExecContext(ctx,
+			`INSERT INTO godplan.employees 
+			 (id, employee_id, position, department, join_date, created_at, updated_at) 
+			 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+			userID,
+			employeeID,
+			"Staff",    // Default position
+			"General",  // Default department
+			time.Now(), // Join date
+			time.Now(),
+			time.Now(),
+		)
+
+		if err != nil {
+			if config.IsDevelopment() {
+				fmt.Printf("⚠️ Failed to create employee record: %v\n", err)
+			}
+			// Jangan return error di sini, karena user sudah berhasil dibuat
+			// Employee record bisa dibuat manual nanti
+		} else {
+			if config.IsDevelopment() {
+				fmt.Printf("✅ Employee record created successfully\n")
+			}
+		}
+	}
+
 	// Get the created user to return complete data
 	var createdUser models.User
 	err = database.DB.QueryRowContext(ctx,
@@ -159,7 +192,7 @@ func Register(c *gin.Context) {
 		&createdUser.Username,
 		&createdUser.Email,
 		&createdUser.Role,
-		&createdUser.Name, // ← UPDATE: &createdUser.FullName jadi &createdUser.Name
+		&createdUser.Name,
 		&createdUser.Phone,
 		&createdUser.AvatarURL,
 		&createdUser.IsActive,
@@ -192,7 +225,8 @@ func Register(c *gin.Context) {
 	}
 
 	if config.IsDevelopment() {
-		fmt.Printf("✅ User registered successfully - ID: %d, Email: %s\n", createdUser.ID, createdUser.Email)
+		fmt.Printf("✅ User registered successfully - ID: %d, Email: %s, Role: %s\n",
+			createdUser.ID, createdUser.Email, createdUser.Role)
 	}
 
 	// Return response with complete user data
@@ -268,7 +302,7 @@ func Login(c *gin.Context) {
 		&user.Email,
 		&user.Password,
 		&user.Role,
-		&user.Name, // ← UPDATE: &user.FullName jadi &user.Name
+		&user.Name,
 		&user.Phone,
 		&user.AvatarURL,
 		&user.IsActive,

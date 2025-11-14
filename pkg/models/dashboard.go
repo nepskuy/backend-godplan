@@ -13,3 +13,11 @@ type TeamMember struct {
 	AvatarURL string `json:"avatar_url"`
 	Position  string `json:"position"`
 }
+
+type HomeDashboardResponse struct {
+	Stats       DashboardStats `json:"stats"`
+	TeamMembers []TeamMember   `json:"team_members"`
+	Greeting    string         `json:"greeting"`
+	UserName    string         `json:"user_name"`
+	UserAvatar  string         `json:"user_avatar"`
+}

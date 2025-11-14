@@ -1,4 +1,4 @@
-FROM golang:1.25.1-alpine AS builder
+FROM golang:1.25.1-alpine
 
 WORKDIR /app
 
@@ -13,19 +13,6 @@ COPY . .
 
 RUN swag init -g ./cmd/main.go -o ./docs
 
-RUN CGO_ENABLED=0 GOOS=linux go build -o app ./cmd/main.go
-
-FROM alpine:3.18
-
-WORKDIR /app
-
-RUN apk add --no-cache ca-certificates
-
-COPY --from=builder /app/app .
-COPY --from=builder /app/docs ./docs
-COPY --from=builder /app/cmd ./cmd
-COPY ca.pem ./ca.pem
-
 EXPOSE 8080
 
-CMD ["./app"]
+CMD ["go", "run", "./cmd/main.go"]

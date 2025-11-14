@@ -78,7 +78,7 @@ func setupGin() {
 		c.Redirect(http.StatusFound, "/swagger")
 	})
 
-	// API Routes - UPDATE: LENGKAPI SEMUA ROUTES
+	// API Routes - UPDATE: LENGKAPI DENGAN ENDPOINT HOME
 	api := router.Group("/api/v1")
 	{
 		// Public routes - No authentication required
@@ -92,7 +92,8 @@ func setupGin() {
 		protected := api.Group("")
 		protected.Use(middleware.GinAuthMiddleware())
 		{
-			// Dashboard routes
+			// Dashboard routes - DITAMBAHKAN ENDPOINT HOME
+			protected.GET("/home", handlers.GetHomeDashboard)
 			protected.GET("/dashboard/stats", handlers.GetDashboardStats)
 			protected.GET("/teams", handlers.GetTeamMembers)
 
@@ -104,7 +105,7 @@ func setupGin() {
 			// Profile routes
 			protected.GET("/profile", handlers.GinGetProfile(userRepo))
 
-			// Task routes - UPDATE: LENGKAPI DENGAN SEMUA HANDLER
+			// Task routes - LENGKAP
 			protected.GET("/tasks", handlers.GetTasks)
 			protected.POST("/tasks", handlers.CreateTask)
 			protected.GET("/tasks/:id", handlers.GetTask)
@@ -137,6 +138,7 @@ func setupGin() {
 	log.Printf("   - GET  /swagger")
 	log.Printf("   - POST /api/v1/auth/register")
 	log.Printf("   - POST /api/v1/auth/login")
+	log.Printf("   - GET  /api/v1/home") // DITAMBAHKAN
 	log.Printf("   - GET  /api/v1/dashboard/stats")
 	log.Printf("   - GET  /api/v1/teams")
 	log.Printf("   - GET  /api/v1/profile")
@@ -494,6 +496,36 @@ func createEmbeddedSwaggerSpec() map[string]interface{} {
 					},
 				},
 			},
+			// DITAMBAHKAN endpoint home
+			"/api/v1/home": map[string]interface{}{
+				"get": map[string]interface{}{
+					"summary":     "Get home dashboard data",
+					"description": "Get complete data for home dashboard including stats, team members, and user profile",
+					"tags":        []string{"dashboard"},
+					"security": []map[string]interface{}{
+						{"bearerAuth": []string{}},
+					},
+					"responses": map[string]interface{}{
+						"200": map[string]interface{}{
+							"description": "Home dashboard data retrieved successfully",
+							"content": map[string]interface{}{
+								"application/json": map[string]interface{}{
+									"schema": map[string]interface{}{
+										"type": "object",
+										"properties": map[string]interface{}{
+											"success": map[string]interface{}{"type": "boolean"},
+											"message": map[string]interface{}{"type": "string"},
+											"data": map[string]interface{}{
+												"$ref": "#/components/schemas/HomeDashboardResponse",
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
 			"/api/v1/dashboard/stats": map[string]interface{}{
 				"get": map[string]interface{}{
 					"summary":     "Get dashboard statistics",
@@ -505,6 +537,20 @@ func createEmbeddedSwaggerSpec() map[string]interface{} {
 					"responses": map[string]interface{}{
 						"200": map[string]interface{}{
 							"description": "Dashboard stats retrieved successfully",
+							"content": map[string]interface{}{
+								"application/json": map[string]interface{}{
+									"schema": map[string]interface{}{
+										"type": "object",
+										"properties": map[string]interface{}{
+											"success": map[string]interface{}{"type": "boolean"},
+											"message": map[string]interface{}{"type": "string"},
+											"data": map[string]interface{}{
+												"$ref": "#/components/schemas/DashboardStats",
+											},
+										},
+									},
+								},
+							},
 						},
 					},
 				},
@@ -520,6 +566,23 @@ func createEmbeddedSwaggerSpec() map[string]interface{} {
 					"responses": map[string]interface{}{
 						"200": map[string]interface{}{
 							"description": "Team members retrieved successfully",
+							"content": map[string]interface{}{
+								"application/json": map[string]interface{}{
+									"schema": map[string]interface{}{
+										"type": "object",
+										"properties": map[string]interface{}{
+											"success": map[string]interface{}{"type": "boolean"},
+											"message": map[string]interface{}{"type": "string"},
+											"data": map[string]interface{}{
+												"type": "array",
+												"items": map[string]interface{}{
+													"$ref": "#/components/schemas/TeamMember",
+												},
+											},
+										},
+									},
+								},
+							},
 						},
 					},
 				},
@@ -638,7 +701,7 @@ func createEmbeddedSwaggerSpec() map[string]interface{} {
 			"/api/v1/tasks/upcoming": map[string]interface{}{
 				"get": map[string]interface{}{
 					"summary":     "Get upcoming tasks",
-					"description": "Get upcoming tasks for dashboard (limit 5)",
+					"description": "Get upcoming tasks for dashboard (limit 3)",
 					"tags":        []string{"tasks"},
 					"security": []map[string]interface{}{
 						{"bearerAuth": []string{}},
@@ -646,6 +709,23 @@ func createEmbeddedSwaggerSpec() map[string]interface{} {
 					"responses": map[string]interface{}{
 						"200": map[string]interface{}{
 							"description": "Upcoming tasks retrieved successfully",
+							"content": map[string]interface{}{
+								"application/json": map[string]interface{}{
+									"schema": map[string]interface{}{
+										"type": "object",
+										"properties": map[string]interface{}{
+											"success": map[string]interface{}{"type": "boolean"},
+											"message": map[string]interface{}{"type": "string"},
+											"data": map[string]interface{}{
+												"type": "array",
+												"items": map[string]interface{}{
+													"$ref": "#/components/schemas/UpcomingTask",
+												},
+											},
+										},
+									},
+								},
+							},
 						},
 					},
 				},
@@ -701,6 +781,52 @@ func createEmbeddedSwaggerSpec() map[string]interface{} {
 					"type":         "http",
 					"scheme":       "bearer",
 					"bearerFormat": "JWT",
+				},
+			},
+			"schemas": map[string]interface{}{
+				"DashboardStats": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"active_projects":   map[string]interface{}{"type": "integer"},
+						"pending_tasks":     map[string]interface{}{"type": "integer"},
+						"attendance_status": map[string]interface{}{"type": "string"},
+						"completion_rate":   map[string]interface{}{"type": "integer"},
+					},
+				},
+				"TeamMember": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"id":         map[string]interface{}{"type": "integer"},
+						"name":       map[string]interface{}{"type": "string"},
+						"avatar_url": map[string]interface{}{"type": "string"},
+						"position":   map[string]interface{}{"type": "string"},
+					},
+				},
+				"UpcomingTask": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"id":       map[string]interface{}{"type": "integer"},
+						"title":    map[string]interface{}{"type": "string"},
+						"due_date": map[string]interface{}{"type": "string"},
+						"priority": map[string]interface{}{"type": "string"},
+					},
+				},
+				"HomeDashboardResponse": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"stats": map[string]interface{}{
+							"$ref": "#/components/schemas/DashboardStats",
+						},
+						"team_members": map[string]interface{}{
+							"type": "array",
+							"items": map[string]interface{}{
+								"$ref": "#/components/schemas/TeamMember",
+							},
+						},
+						"greeting":    map[string]interface{}{"type": "string"},
+						"user_name":   map[string]interface{}{"type": "string"},
+						"user_avatar": map[string]interface{}{"type": "string"},
+					},
 				},
 			},
 		},

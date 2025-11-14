@@ -328,7 +328,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Get overview statistics for home dashboard",
+                "description": "Get overview statistics for dashboard",
                 "produces": [
                     "application/json"
                 ],
@@ -340,8 +340,32 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/models.DashboardStats"
+                        }
+                    }
+                }
+            }
+        },
+        "/home": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get complete data for home dashboard including stats and team members",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard"
+                ],
+                "summary": "Get home dashboard data",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.HomeDashboardResponse"
                         }
                     }
                 }
@@ -447,7 +471,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Get upcoming tasks for dashboard (limit 5)",
+                "description": "Get upcoming tasks for dashboard (limit 3)",
                 "consumes": [
                     "application/json"
                 ],
@@ -584,6 +608,52 @@
                 }
             }
         },
+        "/tasks/{id}/category": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Update category of a specific task",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tasks"
+                ],
+                "summary": "Update task category",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Task ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Category data",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.UpdateTaskCategoryRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/utils.GinResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/tasks/{id}/complete": {
             "patch": {
                 "security": [
@@ -668,6 +738,52 @@
                 }
             }
         },
+        "/tasks/{id}/toggle": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Toggle the completed status of a task (true/false)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tasks"
+                ],
+                "summary": "Toggle task completion status",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Task ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Completion status",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ToggleTaskRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/utils.GinResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/teams": {
             "get": {
                 "security": [
@@ -687,8 +803,10 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.TeamMember"
+                            }
                         }
                     }
                 }
@@ -889,6 +1007,46 @@
                 }
             }
         },
+        "models.DashboardStats": {
+            "type": "object",
+            "properties": {
+                "active_projects": {
+                    "type": "integer"
+                },
+                "attendance_status": {
+                    "type": "string"
+                },
+                "completion_rate": {
+                    "type": "integer"
+                },
+                "pending_tasks": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.HomeDashboardResponse": {
+            "type": "object",
+            "properties": {
+                "greeting": {
+                    "type": "string"
+                },
+                "stats": {
+                    "$ref": "#/definitions/models.DashboardStats"
+                },
+                "team_members": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.TeamMember"
+                    }
+                },
+                "user_avatar": {
+                    "type": "string"
+                },
+                "user_name": {
+                    "type": "string"
+                }
+            }
+        },
         "models.LoginRequest": {
             "type": "object",
             "required": [
@@ -916,6 +1074,14 @@
                 "assignee_id": {
                     "type": "string"
                 },
+                "category": {
+                    "description": "BARU",
+                    "type": "string"
+                },
+                "completed": {
+                    "description": "BARU",
+                    "type": "boolean"
+                },
                 "description": {
                     "type": "string"
                 },
@@ -926,6 +1092,7 @@
                     "type": "number"
                 },
                 "priority": {
+                    "description": "'low', 'medium', 'high'",
                     "type": "string"
                 },
                 "progress": {
@@ -938,6 +1105,42 @@
                     "type": "string"
                 },
                 "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.TeamMember": {
+            "type": "object",
+            "properties": {
+                "avatar_url": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "position": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.ToggleTaskRequest": {
+            "type": "object",
+            "properties": {
+                "completed": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "models.UpdateTaskCategoryRequest": {
+            "type": "object",
+            "required": [
+                "category"
+            ],
+            "properties": {
+                "category": {
                     "type": "string"
                 }
             }

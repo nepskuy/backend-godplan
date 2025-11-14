@@ -10,8 +10,8 @@ import (
 )
 
 var (
-	taskRepo    = repository.NewTaskRepository(database.GetDB())
-	taskService = service.NewTaskService(taskRepo)
+	taskRepo    repository.TaskRepository = repository.NewTaskRepository(database.GetDB())
+	taskService service.TaskService       = service.NewTaskService(taskRepo)
 )
 
 // GetTasks godoc
@@ -97,12 +97,14 @@ func CreateTask(c *gin.Context) {
 		AssigneeID:     taskReq.AssigneeID,
 		Title:          taskReq.Title,
 		Description:    taskReq.Description,
+		Completed:      taskReq.Completed,
+		Priority:       taskReq.Priority,
 		DueDate:        taskReq.DueDate,
+		Category:       taskReq.Category,
 		EstimatedHours: taskReq.EstimatedHours,
 		ActualHours:    taskReq.ActualHours,
 		Progress:       taskReq.Progress,
 		Status:         taskReq.Status,
-		Priority:       taskReq.Priority,
 	}
 
 	err := taskService.CreateTask(task)
@@ -226,12 +228,14 @@ func UpdateTask(c *gin.Context) {
 	existingTask.AssigneeID = taskReq.AssigneeID
 	existingTask.Title = taskReq.Title
 	existingTask.Description = taskReq.Description
+	existingTask.Completed = taskReq.Completed
+	existingTask.Priority = taskReq.Priority
 	existingTask.DueDate = taskReq.DueDate
+	existingTask.Category = taskReq.Category
 	existingTask.EstimatedHours = taskReq.EstimatedHours
 	existingTask.ActualHours = taskReq.ActualHours
 	existingTask.Progress = taskReq.Progress
 	existingTask.Status = taskReq.Status
-	existingTask.Priority = taskReq.Priority
 
 	err = taskService.UpdateTask(existingTask)
 	if err != nil {
@@ -299,7 +303,7 @@ func DeleteTask(c *gin.Context) {
 
 // GetUpcomingTasks godoc
 // @Summary Get upcoming tasks
-// @Description Get upcoming tasks for dashboard (limit 5)
+// @Description Get upcoming tasks for dashboard (limit 3)
 // @Tags tasks
 // @Accept json
 // @Produce json
@@ -325,13 +329,141 @@ func GetUpcomingTasks(c *gin.Context) {
 		return
 	}
 
-	tasks, err := taskService.GetUpcomingTasks(employeeID, 5)
+	tasks, err := taskService.GetUpcomingTasks(employeeID, 3)
 	if err != nil {
 		utils.GinErrorResponse(c, 500, "Failed to fetch upcoming tasks")
 		return
 	}
 
 	utils.GinSuccessResponse(c, 200, "Upcoming tasks retrieved successfully", tasks)
+}
+
+// ToggleTaskCompletion godoc
+// @Summary Toggle task completion status
+// @Description Toggle the completed status of a task (true/false)
+// @Tags tasks
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "Task ID"
+// @Param request body models.ToggleTaskRequest true "Completion status"
+// @Success 200 {object} utils.GinResponse
+// @Router /tasks/{id}/toggle [patch]
+func ToggleTaskCompletion(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		utils.GinErrorResponse(c, 401, "Unauthorized")
+		return
+	}
+
+	taskID := c.Param("id")
+
+	// Cari employee_id berdasarkan user_id
+	var employeeID string
+	err := database.DB.QueryRow(`
+		SELECT id FROM godplan.employees WHERE user_id = $1
+	`, userID).Scan(&employeeID)
+
+	if err != nil {
+		utils.GinErrorResponse(c, 404, "Employee record not found")
+		return
+	}
+
+	// Validate task access
+	hasAccess, err := taskService.ValidateTaskAccess(taskID, employeeID)
+	if err != nil {
+		utils.GinErrorResponse(c, 404, "Task not found")
+		return
+	}
+
+	if !hasAccess {
+		utils.GinErrorResponse(c, 403, "Access denied to this task")
+		return
+	}
+
+	var toggleReq models.ToggleTaskRequest
+	if err := c.ShouldBindJSON(&toggleReq); err != nil {
+		utils.GinErrorResponse(c, 400, "Invalid request data")
+		return
+	}
+
+	err = taskService.ToggleTaskCompletion(taskID, toggleReq.Completed)
+	if err != nil {
+		utils.GinErrorResponse(c, 500, "Failed to toggle task completion")
+		return
+	}
+
+	task, err := taskService.GetTaskByID(taskID)
+	if err != nil {
+		utils.GinErrorResponse(c, 500, "Task updated but failed to retrieve")
+		return
+	}
+
+	utils.GinSuccessResponse(c, 200, "Task completion status updated successfully", task)
+}
+
+// UpdateTaskCategory godoc
+// @Summary Update task category
+// @Description Update category of a specific task
+// @Tags tasks
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "Task ID"
+// @Param request body models.UpdateTaskCategoryRequest true "Category data"
+// @Success 200 {object} utils.GinResponse
+// @Router /tasks/{id}/category [patch]
+func UpdateTaskCategory(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		utils.GinErrorResponse(c, 401, "Unauthorized")
+		return
+	}
+
+	taskID := c.Param("id")
+
+	// Cari employee_id berdasarkan user_id
+	var employeeID string
+	err := database.DB.QueryRow(`
+		SELECT id FROM godplan.employees WHERE user_id = $1
+	`, userID).Scan(&employeeID)
+
+	if err != nil {
+		utils.GinErrorResponse(c, 404, "Employee record not found")
+		return
+	}
+
+	// Validate task access
+	hasAccess, err := taskService.ValidateTaskAccess(taskID, employeeID)
+	if err != nil {
+		utils.GinErrorResponse(c, 404, "Task not found")
+		return
+	}
+
+	if !hasAccess {
+		utils.GinErrorResponse(c, 403, "Access denied to this task")
+		return
+	}
+
+	var categoryReq models.UpdateTaskCategoryRequest
+	if err := c.ShouldBindJSON(&categoryReq); err != nil {
+		utils.GinErrorResponse(c, 400, "Invalid request data")
+		return
+	}
+
+	err = taskService.UpdateTaskCategory(taskID, categoryReq.Category)
+	if err != nil {
+		utils.GinErrorResponse(c, 500, "Failed to update task category")
+		return
+	}
+
+	task, err := taskService.GetTaskByID(taskID)
+	if err != nil {
+		utils.GinErrorResponse(c, 500, "Category updated but failed to retrieve task")
+		return
+	}
+
+	utils.GinSuccessResponse(c, 200, "Task category updated successfully", task)
 }
 
 // UpdateTaskProgress godoc

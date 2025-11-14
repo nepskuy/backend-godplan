@@ -38,6 +38,32 @@ definitions:
         example: 106.8456
         type: number
     type: object
+  models.DashboardStats:
+    properties:
+      active_projects:
+        type: integer
+      attendance_status:
+        type: string
+      completion_rate:
+        type: integer
+      pending_tasks:
+        type: integer
+    type: object
+  models.HomeDashboardResponse:
+    properties:
+      greeting:
+        type: string
+      stats:
+        $ref: '#/definitions/models.DashboardStats'
+      team_members:
+        items:
+          $ref: '#/definitions/models.TeamMember'
+        type: array
+      user_avatar:
+        type: string
+      user_name:
+        type: string
+    type: object
   models.LoginRequest:
     properties:
       email:
@@ -54,6 +80,12 @@ definitions:
         type: number
       assignee_id:
         type: string
+      category:
+        description: BARU
+        type: string
+      completed:
+        description: BARU
+        type: boolean
       description:
         type: string
       due_date:
@@ -61,6 +93,7 @@ definitions:
       estimated_hours:
         type: number
       priority:
+        description: '''low'', ''medium'', ''high'''
         type: string
       progress:
         type: integer
@@ -72,6 +105,29 @@ definitions:
         type: string
     required:
     - title
+    type: object
+  models.TeamMember:
+    properties:
+      avatar_url:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      position:
+        type: string
+    type: object
+  models.ToggleTaskRequest:
+    properties:
+      completed:
+        type: boolean
+    type: object
+  models.UpdateTaskCategoryRequest:
+    properties:
+      category:
+        type: string
+    required:
+    - category
     type: object
   models.User:
     properties:
@@ -350,18 +406,32 @@ paths:
       - auth
   /dashboard/stats:
     get:
-      description: Get overview statistics for home dashboard
+      description: Get overview statistics for dashboard
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/models.DashboardStats'
       security:
       - BearerAuth: []
       summary: Get dashboard statistics
+      tags:
+      - dashboard
+  /home:
+    get:
+      description: Get complete data for home dashboard including stats and team members
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.HomeDashboardResponse'
+      security:
+      - BearerAuth: []
+      summary: Get home dashboard data
       tags:
       - dashboard
   /tasks:
@@ -477,6 +547,35 @@ paths:
       summary: Update task
       tags:
       - tasks
+  /tasks/{id}/category:
+    patch:
+      consumes:
+      - application/json
+      description: Update category of a specific task
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Category data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdateTaskCategoryRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.GinResponse'
+      security:
+      - BearerAuth: []
+      summary: Update task category
+      tags:
+      - tasks
   /tasks/{id}/complete:
     patch:
       consumes:
@@ -530,6 +629,35 @@ paths:
       summary: Update task progress
       tags:
       - tasks
+  /tasks/{id}/toggle:
+    patch:
+      consumes:
+      - application/json
+      description: Toggle the completed status of a task (true/false)
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Completion status
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.ToggleTaskRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.GinResponse'
+      security:
+      - BearerAuth: []
+      summary: Toggle task completion status
+      tags:
+      - tasks
   /tasks/statistics:
     get:
       consumes:
@@ -551,7 +679,7 @@ paths:
     get:
       consumes:
       - application/json
-      description: Get upcoming tasks for dashboard (limit 5)
+      description: Get upcoming tasks for dashboard (limit 3)
       produces:
       - application/json
       responses:
@@ -573,8 +701,9 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties: true
-            type: object
+            items:
+              $ref: '#/definitions/models.TeamMember'
+            type: array
       security:
       - BearerAuth: []
       summary: Get team members
