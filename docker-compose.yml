@@ -16,4 +16,4 @@ services:
 networks:
   godplan-shared-network:
     external: true                
-    name: godplan-shared-network  
+    name: godplan-shared-network
