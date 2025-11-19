@@ -26,7 +26,7 @@ var jwtUtil = utils.NewJWTUtil("your-secret-key-change-in-production")
 // @Success 201 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
-// @Router /auth/register [post]
+// @Router /api/v1/auth/register [post]  //
 func Register(c *gin.Context) {
 	// Check database connection first
 	if err := database.HealthCheck(); err != nil {
@@ -250,7 +250,7 @@ func Register(c *gin.Context) {
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]interface{}
 // @Failure 401 {object} map[string]interface{}
-// @Router /auth/login [post]
+// @Router /api/v1/auth/login [post]
 func Login(c *gin.Context) {
 	// Check database connection first
 	if err := database.HealthCheck(); err != nil {
