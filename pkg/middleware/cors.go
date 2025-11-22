@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"os"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -10,36 +11,29 @@ import (
 func GinCORS() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origin := c.Request.Header.Get("Origin")
+		env := os.Getenv("ENVIRONMENT")
 
-		// Daftar allowed origins
-		allowedOrigins := []string{
-			"https://godplan.godjahstudio.com",
-			"https://be-godplan.godjahstudio.com",
-			"https://fe-godplan.vercel.app",
-		}
-
-		// Jika running di development, tambahkan localhost
-		if os.Getenv("ENVIRONMENT") != "production" {
-			allowedOrigins = append(allowedOrigins,
-				"http://localhost:3000",
-				"http://127.0.0.1:3000",
-				"https://localhost:3000",
-				"http://localhost:8080",
-			)
-		}
-
-		allowed := false
-		for _, o := range allowedOrigins {
-			if origin == o {
-				allowed = true
-				c.Header("Access-Control-Allow-Origin", origin)
-				break
+		// PRODUCTION: hanya allow domain resmi
+		if env == "production" {
+			allowedOrigins := []string{
+				"https://godplan.godjahstudio.com",
+				"https://be-godplan.godjahstudio.com",
+				"https://fe-godplan.vercel.app",
 			}
-		}
 
-		// Jika origin tidak match, dan development, pakai localhost default
-		if !allowed && os.Getenv("ENVIRONMENT") != "production" && len(allowedOrigins) > 0 {
-			c.Header("Access-Control-Allow-Origin", allowedOrigins[0])
+			for _, o := range allowedOrigins {
+				if origin == o {
+					c.Header("Access-Control-Allow-Origin", origin)
+					break
+				}
+			}
+		} else {
+			// DEVELOPMENT: allow semua origin localhost supaya bebas pakai port berapa saja
+			if origin != "" && (strings.HasPrefix(origin, "http://localhost") ||
+				strings.HasPrefix(origin, "http://127.0.0.1") ||
+				strings.HasPrefix(origin, "https://localhost")) {
+				c.Header("Access-Control-Allow-Origin", origin)
+			}
 		}
 
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")

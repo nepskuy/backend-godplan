@@ -63,13 +63,26 @@ func GetHomeDashboard(c *gin.Context) {
 // @Router /dashboard/stats [get]
 // @Security BearerAuth
 func GetDashboardStats(c *gin.Context) {
-	userID, exists := c.Get("userID")
+	userIDVal, exists := c.Get("userID")
 	if !exists {
 		utils.GinErrorResponse(c, 401, "Unauthorized")
 		return
 	}
 
-	stats := getDashboardStats(userID.(int64))
+	// Gin context stores userID as int (set in GinAuthMiddleware),
+	// but getDashboardStats expects int64. Safely convert.
+	var userID int64
+	switch v := userIDVal.(type) {
+	case int64:
+		userID = v
+	case int:
+		userID = int64(v)
+	default:
+		utils.GinErrorResponse(c, 500, "invalid user id type")
+		return
+	}
+
+	stats := getDashboardStats(userID)
 	utils.GinSuccessResponse(c, 200, "Dashboard stats retrieved successfully", stats)
 }
 
@@ -96,25 +109,30 @@ func GetTeamMembers(c *gin.Context) {
 func getDashboardStats(userID int64) models.DashboardStats {
 	var stats models.DashboardStats
 
-	// Count active projects
+	// NOTE: In the current schema, projects.manager_id and tasks.assignee_id
+	// both reference employees(id), which is linked to users(id) via employees.user_id.
+	// For now we treat userID as employees.id and count projects/tasks where the
+	// logged-in user is the manager/assignee.
+
+	// Count active projects for this manager
 	err := database.DB.QueryRow(`
 		SELECT COUNT(*) FROM godplan.projects 
-		WHERE status != 'completed' AND user_id = $1
+		WHERE status != 'completed' AND manager_id = $1
 	`, userID).Scan(&stats.ActiveProjects)
 	if err != nil {
 		stats.ActiveProjects = 0
 	}
 
-	// Count pending tasks
+	// Count pending tasks for this assignee (status != 'completed')
 	err = database.DB.QueryRow(`
 		SELECT COUNT(*) FROM godplan.tasks 
-		WHERE (user_id = $1 OR assigned_to = $1) AND completed = false
+		WHERE assignee_id = $1 AND status != 'completed'
 	`, userID).Scan(&stats.PendingTasks)
 	if err != nil {
 		stats.PendingTasks = 0
 	}
 
-	// Check today's attendance
+	// Check today's attendance (schema already matches user_id)
 	err = database.DB.QueryRow(`
 		SELECT CASE 
 			WHEN EXISTS (SELECT 1 FROM godplan.attendances WHERE user_id = $1 AND DATE(created_at) = CURRENT_DATE) 
@@ -124,14 +142,14 @@ func getDashboardStats(userID int64) models.DashboardStats {
 		stats.AttendanceStatus = "absent"
 	}
 
-	// Calculate completion rate
+	// Calculate completion rate based on tasks status
 	var totalTasks, completedTasks int
 	err = database.DB.QueryRow(`
 		SELECT 
 			COUNT(*) as total,
-			COUNT(CASE WHEN completed = true THEN 1 END) as completed
+			COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed
 		FROM godplan.tasks 
-		WHERE user_id = $1 OR assigned_to = $1
+		WHERE assignee_id = $1
 	`, userID).Scan(&totalTasks, &completedTasks)
 
 	if err != nil {
