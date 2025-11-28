@@ -50,9 +50,9 @@ func Load() *Config {
 		Env:           getEnv("ENV", "development"),
 
 		// 🔥 NEW: Office Location Config
-		// Kantor: -6.305881740196891, 106.67821564820207
-		OfficeLatitude:         getEnvFloat("OFFICE_LATITUDE", -6.305881740196891),
-		OfficeLongitude:        getEnvFloat("OFFICE_LONGITUDE", 106.67821564820207),
+		// Kantor (Updated): -6.305890912517306, 106.67819550322469
+		OfficeLatitude:         getEnvFloat("OFFICE_LATITUDE", -6.305890912517306), // Default fallback
+		OfficeLongitude:        getEnvFloat("OFFICE_LONGITUDE", 106.67819550322469), // Default fallback
 		AttendanceRadiusMeters: getEnvFloat("ATTENDANCE_RADIUS_METERS", 100), // 100 meter default
 		EnableLocationCheck:    getEnvBool("ENABLE_LOCATION_CHECK", true),
 	}

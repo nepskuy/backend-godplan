@@ -80,7 +80,10 @@ func ValidateLocation(userLat, userLon float64) LocationValidationResponse {
 		response.Message = "Lokasi valid, dalam jangkauan kantor"
 		response.NeedForce = false
 	} else {
-		response.Message = fmt.Sprintf("Lokasi di luar jangkauan kantor (%.0f meter dari radius %0.f meter)", distance, cfg.AttendanceRadiusMeters)
+		// Format jarak jadi lebih user-friendly
+		distanceStr := FormatDistance(distance)
+		radiusStr := FormatDistance(cfg.AttendanceRadiusMeters)
+		response.Message = fmt.Sprintf("Anda berada %s dari lokasi kantor (jangkauan: %s)", distanceStr, radiusStr)
 		response.NeedForce = true
 	}
 
