@@ -170,12 +170,15 @@ func ClockIn(c *gin.Context) {
 	}
 
 	// Tentukan status berdasarkan lokasi dan force
-	status := "approved"
+	status := "approved" // Default untuk dalam radius
 	if !inRange && req.Force {
-		status = "forced"
+		status = "pending_forced" // CHANGED: Perlu approval dari supervisor
 		if config.IsDevelopment() {
-			fmt.Printf("🟡 ClockIn: Using forced attendance (%.0fm > %.0fm)\n", distance, cfg.AttendanceRadiusMeters)
+			fmt.Printf("🟡 ClockIn: Forced attendance, needs approval (%.0fm > %.0fm)\n", distance, cfg.AttendanceRadiusMeters)
 		}
+	} else if !inRange {
+		// Seharusnya tidak sampai sini karena sudah di-reject di atas
+		status = "rejected"
 	}
 
 	var attendanceID int
@@ -288,12 +291,15 @@ func ClockOut(c *gin.Context) {
 	}
 
 	// Tentukan status berdasarkan lokasi dan force
-	status := "approved"
+	status := "approved" // Default untuk dalam radius
 	if !inRange && req.Force {
-		status = "forced"
+		status = "pending_forced" // CHANGED: Perlu approval dari supervisor
 		if config.IsDevelopment() {
-			fmt.Printf("🟡 ClockOut: Using forced attendance (%.0fm > %.0fm)\n", distance, cfg.AttendanceRadiusMeters)
+			fmt.Printf("🟡 ClockOut: Forced attendance, needs approval (%.0fm > %.0fm)\n", distance, cfg.AttendanceRadiusMeters)
 		}
+	} else if !inRange {
+		// Seharusnya tidak sampai sini karena sudah di-reject di atas
+		status = "rejected"
 	}
 
 	var attendanceID int
