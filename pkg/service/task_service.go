@@ -3,6 +3,7 @@ package service
 import (
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/nepskuy/be-godplan/pkg/models"
 	"github.com/nepskuy/be-godplan/pkg/repository"
 )
@@ -10,26 +11,26 @@ import (
 // TaskService interface
 type TaskService interface {
 	CreateTask(task *models.Task) error
-	GetTasks() ([]models.Task, error)
-	GetTaskByID(id string) (*models.Task, error)
+	GetTasks(tenantID uuid.UUID) ([]models.Task, error)
+	GetTaskByID(tenantID uuid.UUID, id uuid.UUID) (*models.Task, error)
 	UpdateTask(task *models.Task) error
-	DeleteTask(id string) error
-	GetTasksByAssignee(assigneeID string) ([]models.Task, error)
-	GetUpcomingTasks(assigneeID string, limit int) ([]models.UpcomingTask, error)
-	GetTaskCountByAssignee(assigneeID string) (int, int, error)
-	GetPendingTasksCount(assigneeID string) (int, error)
-	ValidateTaskAccess(taskID string, assigneeID string) (bool, error)
-	UpdateTaskProgress(taskID string, progress int) error
-	CompleteTask(taskID string) error
-	ToggleTaskCompletion(taskID string, completed bool) error
-	UpdateTaskCategory(taskID string, category string) error
-	GetTaskStatistics(assigneeID string) (*models.TaskStatistics, error)
-	GetTasksByStatus(assigneeID string, status string) ([]models.Task, error)
-	GetTasksByPriority(assigneeID string, priority string) ([]models.Task, error)
-	GetTasksByCategory(assigneeID string, category string) ([]models.Task, error)
-	GetCompletedTasks(assigneeID string) ([]models.Task, error)
-	GetActiveTasks(assigneeID string) ([]models.Task, error)
-	SearchTasks(assigneeID string, query string) ([]models.Task, error)
+	DeleteTask(tenantID uuid.UUID, id uuid.UUID) error
+	GetTasksByAssignee(tenantID uuid.UUID, assigneeID uuid.UUID) ([]models.Task, error)
+	GetUpcomingTasks(tenantID uuid.UUID, assigneeID uuid.UUID, limit int) ([]models.UpcomingTask, error)
+	GetTaskCountByAssignee(tenantID uuid.UUID, assigneeID uuid.UUID) (int, int, error)
+	GetPendingTasksCount(tenantID uuid.UUID, assigneeID uuid.UUID) (int, error)
+	ValidateTaskAccess(tenantID uuid.UUID, taskID, assigneeID uuid.UUID) (bool, error)
+	UpdateTaskProgress(tenantID uuid.UUID, taskID uuid.UUID, progress int) error
+	CompleteTask(tenantID uuid.UUID, taskID uuid.UUID) error
+	ToggleTaskCompletion(tenantID uuid.UUID, taskID uuid.UUID, completed bool) error
+	UpdateTaskCategory(tenantID uuid.UUID, taskID uuid.UUID, category string) error
+	GetTaskStatistics(tenantID uuid.UUID, assigneeID uuid.UUID) (*models.TaskStatistics, error)
+	GetTasksByStatus(tenantID uuid.UUID, assigneeID uuid.UUID, status string) ([]models.Task, error)
+	GetTasksByPriority(tenantID uuid.UUID, assigneeID uuid.UUID, priority string) ([]models.Task, error)
+	GetTasksByCategory(tenantID uuid.UUID, assigneeID uuid.UUID, category string) ([]models.Task, error)
+	GetCompletedTasks(tenantID uuid.UUID, assigneeID uuid.UUID) ([]models.Task, error)
+	GetActiveTasks(tenantID uuid.UUID, assigneeID uuid.UUID) ([]models.Task, error)
+	SearchTasks(tenantID uuid.UUID, assigneeID uuid.UUID, query string) ([]models.Task, error)
 }
 
 // taskServiceImpl implementasi konkret
@@ -64,50 +65,50 @@ func (s *taskServiceImpl) CreateTask(task *models.Task) error {
 	return s.taskRepo.CreateTask(task)
 }
 
-func (s *taskServiceImpl) GetTasks() ([]models.Task, error) {
-	return s.taskRepo.GetTasks()
+func (s *taskServiceImpl) GetTasks(tenantID uuid.UUID) ([]models.Task, error) {
+	return s.taskRepo.GetTasks(tenantID)
 }
 
-func (s *taskServiceImpl) GetTaskByID(id string) (*models.Task, error) {
-	return s.taskRepo.GetTaskByID(id)
+func (s *taskServiceImpl) GetTaskByID(tenantID uuid.UUID, id uuid.UUID) (*models.Task, error) {
+	return s.taskRepo.GetTaskByID(tenantID, id)
 }
 
 func (s *taskServiceImpl) UpdateTask(task *models.Task) error {
 	return s.taskRepo.UpdateTask(task)
 }
 
-func (s *taskServiceImpl) DeleteTask(id string) error {
-	return s.taskRepo.DeleteTask(id)
+func (s *taskServiceImpl) DeleteTask(tenantID uuid.UUID, id uuid.UUID) error {
+	return s.taskRepo.DeleteTask(tenantID, id)
 }
 
-func (s *taskServiceImpl) GetTasksByAssignee(assigneeID string) ([]models.Task, error) {
-	return s.taskRepo.GetTasksByAssignee(assigneeID)
+func (s *taskServiceImpl) GetTasksByAssignee(tenantID uuid.UUID, assigneeID uuid.UUID) ([]models.Task, error) {
+	return s.taskRepo.GetTasksByAssignee(tenantID, assigneeID)
 }
 
-func (s *taskServiceImpl) GetUpcomingTasks(assigneeID string, limit int) ([]models.UpcomingTask, error) {
-	return s.taskRepo.GetUpcomingTasks(assigneeID, limit)
+func (s *taskServiceImpl) GetUpcomingTasks(tenantID uuid.UUID, assigneeID uuid.UUID, limit int) ([]models.UpcomingTask, error) {
+	return s.taskRepo.GetUpcomingTasks(tenantID, assigneeID, limit)
 }
 
-func (s *taskServiceImpl) GetTaskCountByAssignee(assigneeID string) (int, int, error) {
-	return s.taskRepo.GetTaskCountByAssignee(assigneeID)
+func (s *taskServiceImpl) GetTaskCountByAssignee(tenantID uuid.UUID, assigneeID uuid.UUID) (int, int, error) {
+	return s.taskRepo.GetTaskCountByAssignee(tenantID, assigneeID)
 }
 
-func (s *taskServiceImpl) GetPendingTasksCount(assigneeID string) (int, error) {
-	return s.taskRepo.GetPendingTasksCount(assigneeID)
+func (s *taskServiceImpl) GetPendingTasksCount(tenantID uuid.UUID, assigneeID uuid.UUID) (int, error) {
+	return s.taskRepo.GetPendingTasksCount(tenantID, assigneeID)
 }
 
 // ValidateTaskAccess - Check if user has access to this task
-func (s *taskServiceImpl) ValidateTaskAccess(taskID string, assigneeID string) (bool, error) {
-	return s.taskRepo.ValidateTaskAccess(taskID, assigneeID)
+func (s *taskServiceImpl) ValidateTaskAccess(tenantID uuid.UUID, taskID, assigneeID uuid.UUID) (bool, error) {
+	return s.taskRepo.ValidateTaskAccess(tenantID, taskID, assigneeID)
 }
 
 // UpdateTaskProgress - Update task progress with validation
-func (s *taskServiceImpl) UpdateTaskProgress(taskID string, progress int) error {
+func (s *taskServiceImpl) UpdateTaskProgress(tenantID uuid.UUID, taskID uuid.UUID, progress int) error {
 	if progress < 0 || progress > 100 {
 		return repository.ErrInvalidProgress
 	}
 
-	task, err := s.taskRepo.GetTaskByID(taskID)
+	task, err := s.taskRepo.GetTaskByID(tenantID, taskID)
 	if err != nil {
 		return err
 	}
@@ -128,8 +129,8 @@ func (s *taskServiceImpl) UpdateTaskProgress(taskID string, progress int) error 
 }
 
 // CompleteTask - Mark task as completed
-func (s *taskServiceImpl) CompleteTask(taskID string) error {
-	task, err := s.taskRepo.GetTaskByID(taskID)
+func (s *taskServiceImpl) CompleteTask(tenantID uuid.UUID, taskID uuid.UUID) error {
+	task, err := s.taskRepo.GetTaskByID(tenantID, taskID)
 	if err != nil {
 		return err
 	}
@@ -142,8 +143,8 @@ func (s *taskServiceImpl) CompleteTask(taskID string) error {
 }
 
 // ToggleTaskCompletion - Toggle completed status
-func (s *taskServiceImpl) ToggleTaskCompletion(taskID string, completed bool) error {
-	task, err := s.taskRepo.GetTaskByID(taskID)
+func (s *taskServiceImpl) ToggleTaskCompletion(tenantID uuid.UUID, taskID uuid.UUID, completed bool) error {
+	task, err := s.taskRepo.GetTaskByID(tenantID, taskID)
 	if err != nil {
 		return err
 	}
@@ -161,8 +162,8 @@ func (s *taskServiceImpl) ToggleTaskCompletion(taskID string, completed bool) er
 }
 
 // UpdateTaskCategory - Update task category
-func (s *taskServiceImpl) UpdateTaskCategory(taskID string, category string) error {
-	task, err := s.taskRepo.GetTaskByID(taskID)
+func (s *taskServiceImpl) UpdateTaskCategory(tenantID uuid.UUID, taskID uuid.UUID, category string) error {
+	task, err := s.taskRepo.GetTaskByID(tenantID, taskID)
 	if err != nil {
 		return err
 	}
@@ -172,13 +173,13 @@ func (s *taskServiceImpl) UpdateTaskCategory(taskID string, category string) err
 }
 
 // GetTaskStatistics - Get task statistics for dashboard
-func (s *taskServiceImpl) GetTaskStatistics(assigneeID string) (*models.TaskStatistics, error) {
-	totalTasks, completedTasks, err := s.taskRepo.GetTaskCountByAssignee(assigneeID)
+func (s *taskServiceImpl) GetTaskStatistics(tenantID uuid.UUID, assigneeID uuid.UUID) (*models.TaskStatistics, error) {
+	totalTasks, completedTasks, err := s.taskRepo.GetTaskCountByAssignee(tenantID, assigneeID)
 	if err != nil {
 		return nil, err
 	}
 
-	pendingTasks, err := s.taskRepo.GetPendingTasksCount(assigneeID)
+	pendingTasks, err := s.taskRepo.GetPendingTasksCount(tenantID, assigneeID)
 	if err != nil {
 		return nil, err
 	}
@@ -197,8 +198,8 @@ func (s *taskServiceImpl) GetTaskStatistics(assigneeID string) (*models.TaskStat
 }
 
 // GetTasksByStatus - Get tasks filtered by status
-func (s *taskServiceImpl) GetTasksByStatus(assigneeID string, status string) ([]models.Task, error) {
-	allTasks, err := s.taskRepo.GetTasksByAssignee(assigneeID)
+func (s *taskServiceImpl) GetTasksByStatus(tenantID uuid.UUID, assigneeID uuid.UUID, status string) ([]models.Task, error) {
+	allTasks, err := s.taskRepo.GetTasksByAssignee(tenantID, assigneeID)
 	if err != nil {
 		return nil, err
 	}
@@ -214,8 +215,8 @@ func (s *taskServiceImpl) GetTasksByStatus(assigneeID string, status string) ([]
 }
 
 // GetTasksByPriority - Get tasks filtered by priority
-func (s *taskServiceImpl) GetTasksByPriority(assigneeID string, priority string) ([]models.Task, error) {
-	allTasks, err := s.taskRepo.GetTasksByAssignee(assigneeID)
+func (s *taskServiceImpl) GetTasksByPriority(tenantID uuid.UUID, assigneeID uuid.UUID, priority string) ([]models.Task, error) {
+	allTasks, err := s.taskRepo.GetTasksByAssignee(tenantID, assigneeID)
 	if err != nil {
 		return nil, err
 	}
@@ -231,8 +232,8 @@ func (s *taskServiceImpl) GetTasksByPriority(assigneeID string, priority string)
 }
 
 // GetTasksByCategory - Get tasks filtered by category
-func (s *taskServiceImpl) GetTasksByCategory(assigneeID string, category string) ([]models.Task, error) {
-	allTasks, err := s.taskRepo.GetTasksByAssignee(assigneeID)
+func (s *taskServiceImpl) GetTasksByCategory(tenantID uuid.UUID, assigneeID uuid.UUID, category string) ([]models.Task, error) {
+	allTasks, err := s.taskRepo.GetTasksByAssignee(tenantID, assigneeID)
 	if err != nil {
 		return nil, err
 	}
@@ -248,8 +249,8 @@ func (s *taskServiceImpl) GetTasksByCategory(assigneeID string, category string)
 }
 
 // GetCompletedTasks - Get completed tasks
-func (s *taskServiceImpl) GetCompletedTasks(assigneeID string) ([]models.Task, error) {
-	allTasks, err := s.taskRepo.GetTasksByAssignee(assigneeID)
+func (s *taskServiceImpl) GetCompletedTasks(tenantID uuid.UUID, assigneeID uuid.UUID) ([]models.Task, error) {
+	allTasks, err := s.taskRepo.GetTasksByAssignee(tenantID, assigneeID)
 	if err != nil {
 		return nil, err
 	}
@@ -265,8 +266,8 @@ func (s *taskServiceImpl) GetCompletedTasks(assigneeID string) ([]models.Task, e
 }
 
 // GetActiveTasks - Get active (not completed) tasks
-func (s *taskServiceImpl) GetActiveTasks(assigneeID string) ([]models.Task, error) {
-	allTasks, err := s.taskRepo.GetTasksByAssignee(assigneeID)
+func (s *taskServiceImpl) GetActiveTasks(tenantID uuid.UUID, assigneeID uuid.UUID) ([]models.Task, error) {
+	allTasks, err := s.taskRepo.GetTasksByAssignee(tenantID, assigneeID)
 	if err != nil {
 		return nil, err
 	}
@@ -282,8 +283,8 @@ func (s *taskServiceImpl) GetActiveTasks(assigneeID string) ([]models.Task, erro
 }
 
 // SearchTasks - Search tasks by title or description
-func (s *taskServiceImpl) SearchTasks(assigneeID string, query string) ([]models.Task, error) {
-	allTasks, err := s.taskRepo.GetTasksByAssignee(assigneeID)
+func (s *taskServiceImpl) SearchTasks(tenantID uuid.UUID, assigneeID uuid.UUID, query string) ([]models.Task, error) {
+	allTasks, err := s.taskRepo.GetTasksByAssignee(tenantID, assigneeID)
 	if err != nil {
 		return nil, err
 	}

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
+	"github.com/google/uuid"
 )
 
 type JWTUtil struct {
@@ -16,19 +17,21 @@ func NewJWTUtil(secretKey string) *JWTUtil {
 }
 
 type Claims struct {
-	UserID int    `json:"user_id"`
-	Email  string `json:"email"`
-	Role   string `json:"role"`
+	UserID   uuid.UUID `json:"user_id"`
+	Email    string    `json:"email"`
+	Role     string    `json:"role"`
+	TenantID uuid.UUID `json:"tenant_id"`
 	jwt.RegisteredClaims
 }
 
-func (j *JWTUtil) GenerateToken(userID int, email, role string) (string, error) {
+func (j *JWTUtil) GenerateToken(userID uuid.UUID, email, role string, tenantID uuid.UUID) (string, error) {
 	expirationTime := time.Now().Add(24 * time.Hour)
 
 	claims := &Claims{
-		UserID: userID,
-		Email:  email,
-		Role:   role,
+		UserID:   userID,
+		Email:    email,
+		Role:     role,
+		TenantID: tenantID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expirationTime),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -61,10 +64,10 @@ func (j *JWTUtil) ValidateToken(tokenString string) (*Claims, error) {
 }
 
 // Tambahkan function ini jika test masih butuh
-func (j *JWTUtil) GetUserIDFromToken(tokenString string) (int, error) {
+func (j *JWTUtil) GetUserIDFromToken(tokenString string) (uuid.UUID, error) {
 	claims, err := j.ValidateToken(tokenString)
 	if err != nil {
-		return 0, err
+		return uuid.Nil, err
 	}
 	return claims.UserID, nil
 }

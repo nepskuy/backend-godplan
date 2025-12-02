@@ -2,10 +2,10 @@ package handlers
 
 import (
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/nepskuy/be-godplan/pkg/config"
@@ -14,6 +14,16 @@ import (
 	"github.com/nepskuy/be-godplan/pkg/utils"
 )
 
+// GetUsers godoc
+// @Summary Get all users
+// @Description Get list of all active users
+// @Tags users
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} utils.GinResponse
+// @Failure 500 {object} utils.GinResponse
+// @Router /users [get]
 // GetUsers godoc
 // @Summary Get all users
 // @Description Get list of all active users
@@ -34,11 +44,18 @@ func GetUsers(c *gin.Context) {
 		return
 	}
 
+	tenantIDStr := c.GetString("tenant_id")
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		utils.GinErrorResponse(c, 401, "Invalid tenant ID")
+		return
+	}
+
 	rows, err := database.DB.Query(`
-		SELECT id, username, email, role, name, phone, avatar_url, is_active, created_at, updated_at 
+		SELECT id, tenant_id, username, email, role, name, phone, avatar_url, is_active, created_at, updated_at 
 		FROM godplan.users 
-		WHERE is_active = true
-	`)
+		WHERE is_active = true AND tenant_id = $1
+	`, tenantID)
 	if err != nil {
 		if config.IsDevelopment() {
 			fmt.Printf("❌ Failed to fetch users: %v\n", err)
@@ -53,10 +70,11 @@ func GetUsers(c *gin.Context) {
 		var user models.User
 		err := rows.Scan(
 			&user.ID,
+			&user.TenantID,
 			&user.Username,
 			&user.Email,
 			&user.Role,
-			&user.Name, // ← UPDATE: &user.FullName jadi &user.Name
+			&user.Name,
 			&user.Phone,
 			&user.AvatarURL,
 			&user.IsActive,
@@ -101,6 +119,13 @@ func CreateUser(c *gin.Context) {
 		return
 	}
 
+	tenantIDStr := c.GetString("tenant_id")
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		utils.GinErrorResponse(c, 401, "Invalid tenant ID")
+		return
+	}
+
 	var user models.User
 	if err := c.ShouldBindJSON(&user); err != nil {
 		utils.GinErrorResponse(c, 400, "Invalid request body")
@@ -117,9 +142,10 @@ func CreateUser(c *gin.Context) {
 	if user.Role == "" {
 		user.Role = "employee"
 	}
-	if user.Name == "" { // ← UPDATE: user.FullName jadi user.Name
+	if user.Name == "" {
 		user.Name = user.Username
 	}
+	user.TenantID = tenantID
 
 	// Hash password
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
@@ -131,16 +157,17 @@ func CreateUser(c *gin.Context) {
 		return
 	}
 
-	var id int64
+	var id uuid.UUID
 	err = database.DB.QueryRow(
 		`INSERT INTO godplan.users (
-			username, email, password, role, name, phone, avatar_url, is_active, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
+			tenant_id, username, email, password, role, name, phone, avatar_url, is_active, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
+		user.TenantID,
 		user.Username,
 		user.Email,
 		string(hashedPassword),
 		user.Role,
-		user.Name, // ← UPDATE: user.FullName jadi user.Name
+		user.Name,
 		user.Phone,
 		user.AvatarURL,
 		true, // is_active
@@ -159,15 +186,16 @@ func CreateUser(c *gin.Context) {
 	// Get the created user to return complete data
 	var createdUser models.User
 	err = database.DB.QueryRow(
-		`SELECT id, username, email, role, name, phone, avatar_url, is_active, created_at, updated_at 
+		`SELECT id, tenant_id, username, email, role, name, phone, avatar_url, is_active, created_at, updated_at 
 		 FROM godplan.users WHERE id = $1`,
 		id,
 	).Scan(
 		&createdUser.ID,
+		&createdUser.TenantID,
 		&createdUser.Username,
 		&createdUser.Email,
 		&createdUser.Role,
-		&createdUser.Name, // ← UPDATE: &createdUser.FullName jadi &createdUser.Name
+		&createdUser.Name,
 		&createdUser.Phone,
 		&createdUser.AvatarURL,
 		&createdUser.IsActive,
@@ -184,7 +212,7 @@ func CreateUser(c *gin.Context) {
 	}
 
 	if config.IsDevelopment() {
-		fmt.Printf("✅ CreateUser successful: ID=%d, Username=%s, Email=%s\n", createdUser.ID, createdUser.Username, createdUser.Email)
+		fmt.Printf("✅ CreateUser successful: ID=%s, Username=%s, Email=%s\n", createdUser.ID, createdUser.Username, createdUser.Email)
 	}
 
 	utils.GinSuccessResponse(c, 201, "User created successfully", createdUser)
@@ -197,7 +225,7 @@ func CreateUser(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Security BearerAuth
-// @Param id path int true "User ID"
+// @Param id path string true "User ID"
 // @Success 200 {object} utils.GinResponse
 // @Failure 400 {object} utils.GinResponse
 // @Failure 404 {object} utils.GinResponse
@@ -213,8 +241,15 @@ func GetUser(c *gin.Context) {
 		return
 	}
 
+	tenantIDStr := c.GetString("tenant_id")
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		utils.GinErrorResponse(c, 401, "Invalid tenant ID")
+		return
+	}
+
 	idStr := c.Param("id")
-	id, err := strconv.Atoi(idStr)
+	id, err := uuid.Parse(idStr)
 	if err != nil {
 		utils.GinErrorResponse(c, 400, "Invalid user ID")
 		return
@@ -222,15 +257,16 @@ func GetUser(c *gin.Context) {
 
 	var user models.User
 	err = database.DB.QueryRow(
-		`SELECT id, username, email, role, name, phone, avatar_url, is_active, created_at, updated_at 
-		 FROM godplan.users WHERE id = $1 AND is_active = true`,
-		id,
+		`SELECT id, tenant_id, username, email, role, name, phone, avatar_url, is_active, created_at, updated_at 
+		 FROM godplan.users WHERE id = $1 AND tenant_id = $2 AND is_active = true`,
+		id, tenantID,
 	).Scan(
 		&user.ID,
+		&user.TenantID,
 		&user.Username,
 		&user.Email,
 		&user.Role,
-		&user.Name, // ← UPDATE: &user.FullName jadi &user.Name
+		&user.Name,
 		&user.Phone,
 		&user.AvatarURL,
 		&user.IsActive,
@@ -240,14 +276,14 @@ func GetUser(c *gin.Context) {
 
 	if err != nil {
 		if config.IsDevelopment() {
-			fmt.Printf("❌ User not found: ID=%d, error=%v\n", id, err)
+			fmt.Printf("❌ User not found: ID=%s, error=%v\n", id, err)
 		}
 		utils.GinErrorResponse(c, 404, "User not found")
 		return
 	}
 
 	if config.IsDevelopment() {
-		fmt.Printf("✅ GetUser successful: ID=%d, Username=%s\n", user.ID, user.Username)
+		fmt.Printf("✅ GetUser successful: ID=%s, Username=%s\n", user.ID, user.Username)
 	}
 
 	utils.GinSuccessResponse(c, 200, "User retrieved successfully", user)

@@ -11,11 +11,23 @@ import (
 	"github.com/nepskuy/be-godplan/pkg/database"
 	"github.com/nepskuy/be-godplan/pkg/models"
 	"github.com/nepskuy/be-godplan/pkg/utils"
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
 var jwtUtil = utils.NewJWTUtil("your-secret-key-change-in-production")
 
+// Register godoc
+// @Summary Register a new user
+// @Description Create a new user account with complete profile data
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body models.UserRegistrationRequest true "User registration data"
+// @Success 201 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /api/v1/auth/register [post]  //
 // Register godoc
 // @Summary Register a new user
 // @Description Create a new user account with complete profile data
@@ -103,12 +115,16 @@ func Register(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
-	var userID int64
+	// Default Tenant ID
+	defaultTenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+
+	var userID uuid.UUID
 	err = database.DB.QueryRowContext(ctx,
 		`INSERT INTO godplan.users 
-			(username, email, password, role, name, phone, avatar_url, is_active, created_at, updated_at) 
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) 
+			(tenant_id, username, email, password, role, name, phone, avatar_url, is_active, created_at, updated_at) 
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) 
 		 RETURNING id`,
+		defaultTenantID,
 		req.Username,
 		req.Email,
 		string(hashedPassword),
@@ -127,8 +143,8 @@ func Register(c *gin.Context) {
 
 			// Check if user already exists
 			var usernameCount, emailCount int
-			database.DB.QueryRow("SELECT COUNT(*) FROM godplan.users WHERE username = $1", req.Username).Scan(&usernameCount)
-			database.DB.QueryRow("SELECT COUNT(*) FROM godplan.users WHERE email = $1", req.Email).Scan(&emailCount)
+			database.DB.QueryRow("SELECT COUNT(*) FROM godplan.users WHERE username = $1 AND tenant_id = $2", req.Username, defaultTenantID).Scan(&usernameCount)
+			database.DB.QueryRow("SELECT COUNT(*) FROM godplan.users WHERE email = $1 AND tenant_id = $2", req.Email, defaultTenantID).Scan(&emailCount)
 
 			fmt.Printf("🔍 Username '%s' exists: %d, Email '%s' exists: %d\n",
 				req.Username, usernameCount, req.Email, emailCount)
@@ -150,19 +166,20 @@ func Register(c *gin.Context) {
 
 	// ✅ AUTO-CREATE EMPLOYEE RECORD FOR EMPLOYEE ROLE
 	if req.Role == "employee" {
-		employeeID := fmt.Sprintf("EMP%04d", userID)
+		// Use UUID for employee ID logic if needed, but here we just use a string format
+		// Since userID is UUID, we can't use %04d. We'll use a random suffix or part of UUID.
+		employeeID := fmt.Sprintf("EMP-%s", userID.String()[:8])
 		if config.IsDevelopment() {
-			fmt.Printf("👨‍💼 Creating employee record - UserID: %d, EmployeeID: %s\n", userID, employeeID)
+			fmt.Printf("👨‍💼 Creating employee record - UserID: %s, EmployeeID: %s\n", userID, employeeID)
 		}
 
 		_, err = database.DB.ExecContext(ctx,
 			`INSERT INTO godplan.employees 
-			 (id, employee_id, position, department, join_date, created_at, updated_at) 
-			 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+			 (tenant_id, user_id, employee_id, position_id, department_id, join_date, created_at, updated_at) 
+			 VALUES ($1, $2, $3, NULL, NULL, $4, $5, $6)`,
+			defaultTenantID,
 			userID,
 			employeeID,
-			"Staff",    // Default position
-			"General",  // Default department
 			time.Now(), // Join date
 			time.Now(),
 			time.Now(),
@@ -184,11 +201,12 @@ func Register(c *gin.Context) {
 	// Get the created user to return complete data
 	var createdUser models.User
 	err = database.DB.QueryRowContext(ctx,
-		`SELECT id, username, email, role, name, phone, avatar_url, is_active, created_at, updated_at 
+		`SELECT id, tenant_id, username, email, role, name, phone, avatar_url, is_active, created_at, updated_at 
 		 FROM godplan.users WHERE id = $1`,
 		userID,
 	).Scan(
 		&createdUser.ID,
+		&createdUser.TenantID,
 		&createdUser.Username,
 		&createdUser.Email,
 		&createdUser.Role,
@@ -212,7 +230,7 @@ func Register(c *gin.Context) {
 	}
 
 	// Generate JWT token
-	token, err := jwtUtil.GenerateToken(int(createdUser.ID), createdUser.Email, createdUser.Role)
+	token, err := jwtUtil.GenerateToken(createdUser.ID, createdUser.Email, createdUser.Role, createdUser.TenantID)
 	if err != nil {
 		if config.IsDevelopment() {
 			fmt.Printf("❌ Failed to generate token: %v\n", err)
@@ -225,7 +243,7 @@ func Register(c *gin.Context) {
 	}
 
 	if config.IsDevelopment() {
-		fmt.Printf("✅ User registered successfully - ID: %d, Email: %s, Role: %s\n",
+		fmt.Printf("✅ User registered successfully - ID: %s, Email: %s, Role: %s\n",
 			createdUser.ID, createdUser.Email, createdUser.Role)
 	}
 
@@ -290,14 +308,18 @@ func Login(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
+	// Default Tenant ID
+	defaultTenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+
 	var user models.User
 	err := database.DB.QueryRowContext(ctx,
-		`SELECT id, username, email, password, role, name, phone, 
+		`SELECT id, tenant_id, username, email, password, role, name, phone, 
 			avatar_url, is_active, created_at, updated_at
-		 FROM godplan.users WHERE email = $1 AND is_active = true`,
-		credentials.Email,
+		 FROM godplan.users WHERE email = $1 AND tenant_id = $2 AND is_active = true`,
+		credentials.Email, defaultTenantID,
 	).Scan(
 		&user.ID,
+		&user.TenantID,
 		&user.Username,
 		&user.Email,
 		&user.Password,
@@ -322,7 +344,7 @@ func Login(c *gin.Context) {
 	}
 
 	if config.IsDevelopment() {
-		fmt.Printf("✅ User found - ID: %d, Email: %s, Role: %s\n", user.ID, user.Email, user.Role)
+		fmt.Printf("✅ User found - ID: %s, Email: %s, Role: %s\n", user.ID, user.Email, user.Role)
 		fmt.Printf("🔐 PASSWORD DEBUG - Stored hash: %s\n", user.Password)
 		fmt.Printf("🔐 PASSWORD DEBUG - Input password: %s\n", credentials.Password)
 	}
@@ -351,7 +373,7 @@ func Login(c *gin.Context) {
 	}
 
 	// Generate JWT token
-	token, err := jwtUtil.GenerateToken(int(user.ID), user.Email, user.Role)
+	token, err := jwtUtil.GenerateToken(user.ID, user.Email, user.Role, user.TenantID)
 	if err != nil {
 		if config.IsDevelopment() {
 			fmt.Printf("❌ Token generation failed: %v\n", err)
@@ -364,7 +386,7 @@ func Login(c *gin.Context) {
 	}
 
 	if config.IsDevelopment() {
-		fmt.Printf("✅ Login successful - User ID: %d, Role: %s\n", user.ID, user.Role)
+		fmt.Printf("✅ Login successful - User ID: %s, Role: %s\n", user.ID, user.Role)
 	}
 
 	// Clear password before returning user data

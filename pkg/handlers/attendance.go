@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/nepskuy/be-godplan/pkg/config"
 	"github.com/nepskuy/be-godplan/pkg/database"
 	"github.com/nepskuy/be-godplan/pkg/models"
@@ -34,8 +35,8 @@ type LocationCheckRequest struct {
 }
 
 type AttendanceResponse struct {
-	ID              int       `json:"id"`
-	UserID          int       `json:"user_id"`
+	ID              uuid.UUID `json:"id"`
+	UserID          uuid.UUID `json:"user_id"`
 	Type            string    `json:"type"`
 	Status          string    `json:"status"`
 	Latitude        float64   `json:"latitude"`
@@ -132,7 +133,7 @@ func ClockIn(c *gin.Context) {
 		return
 	}
 
-	userID, exists := c.Get("userID")
+	userIDVal, exists := c.Get("userID")
 	if !exists {
 		if config.IsDevelopment() {
 			fmt.Println("🔴 ClockIn: userID not found in context")
@@ -141,17 +142,30 @@ func ClockIn(c *gin.Context) {
 		return
 	}
 
-	userIDInt, ok := userID.(int)
-	if !ok {
-		if config.IsDevelopment() {
-			fmt.Println("🔴 ClockIn: userID type assertion failed")
+	tenantIDStr := c.GetString("tenant_id")
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		utils.GinErrorResponse(c, http.StatusUnauthorized, "Invalid tenant ID")
+		return
+	}
+
+	var userID uuid.UUID
+	switch v := userIDVal.(type) {
+	case uuid.UUID:
+		userID = v
+	case string:
+		userID, err = uuid.Parse(v)
+		if err != nil {
+			utils.GinErrorResponse(c, http.StatusInternalServerError, "Invalid user ID format")
+			return
 		}
-		utils.GinErrorResponse(c, http.StatusInternalServerError, "Invalid user ID")
+	default:
+		utils.GinErrorResponse(c, http.StatusInternalServerError, "Invalid user ID type")
 		return
 	}
 
 	if config.IsDevelopment() {
-		fmt.Printf("🔵 ClockIn: userID=%d\n", userIDInt)
+		fmt.Printf("🔵 ClockIn: userID=%s\n", userID)
 	}
 
 	// 🔥 NEW: Validasi lokasi
@@ -181,10 +195,10 @@ func ClockIn(c *gin.Context) {
 		status = "rejected"
 	}
 
-	var attendanceID int
-	err := database.DB.QueryRow(
-		"INSERT INTO attendances (user_id, type, status, latitude, longitude, photo_selfie, in_range, force_attendance, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id",
-		userIDInt, "in", status, req.Latitude, req.Longitude, req.PhotoSelfie, inRange, req.Force, time.Now(),
+	var attendanceID uuid.UUID
+	err = database.DB.QueryRow(
+		"INSERT INTO attendances (tenant_id, user_id, type, status, latitude, longitude, photo_selfie, in_range, force_attendance, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id",
+		tenantID, userID, "in", status, req.Latitude, req.Longitude, req.PhotoSelfie, inRange, req.Force, time.Now(),
 	).Scan(&attendanceID)
 
 	if err != nil {
@@ -196,12 +210,12 @@ func ClockIn(c *gin.Context) {
 	}
 
 	if config.IsDevelopment() {
-		fmt.Printf("🔵 ClockIn successful: attendanceID=%d, status=%s, inRange=%t\n", attendanceID, status, inRange)
+		fmt.Printf("🔵 ClockIn successful: attendanceID=%s, status=%s, inRange=%t\n", attendanceID, status, inRange)
 	}
 
 	response := AttendanceResponse{
 		ID:              attendanceID,
-		UserID:          userIDInt,
+		UserID:          userID,
 		Type:            "in",
 		Status:          status,
 		Latitude:        req.Latitude,
@@ -253,7 +267,7 @@ func ClockOut(c *gin.Context) {
 		return
 	}
 
-	userID, exists := c.Get("userID")
+	userIDVal, exists := c.Get("userID")
 	if !exists {
 		if config.IsDevelopment() {
 			fmt.Println("🔴 ClockOut: userID not found in context")
@@ -262,17 +276,30 @@ func ClockOut(c *gin.Context) {
 		return
 	}
 
-	userIDInt, ok := userID.(int)
-	if !ok {
-		if config.IsDevelopment() {
-			fmt.Println("🔴 ClockOut: userID type assertion failed")
+	tenantIDStr := c.GetString("tenant_id")
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		utils.GinErrorResponse(c, http.StatusUnauthorized, "Invalid tenant ID")
+		return
+	}
+
+	var userID uuid.UUID
+	switch v := userIDVal.(type) {
+	case uuid.UUID:
+		userID = v
+	case string:
+		userID, err = uuid.Parse(v)
+		if err != nil {
+			utils.GinErrorResponse(c, http.StatusInternalServerError, "Invalid user ID format")
+			return
 		}
-		utils.GinErrorResponse(c, http.StatusInternalServerError, "Invalid user ID")
+	default:
+		utils.GinErrorResponse(c, http.StatusInternalServerError, "Invalid user ID type")
 		return
 	}
 
 	if config.IsDevelopment() {
-		fmt.Printf("🔵 ClockOut: userID=%d\n", userIDInt)
+		fmt.Printf("🔵 ClockOut: userID=%s\n", userID)
 	}
 
 	// 🔥 NEW: Validasi lokasi
@@ -302,10 +329,10 @@ func ClockOut(c *gin.Context) {
 		status = "rejected"
 	}
 
-	var attendanceID int
-	err := database.DB.QueryRow(
-		"INSERT INTO attendances (user_id, type, status, latitude, longitude, photo_selfie, in_range, force_attendance, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id",
-		userIDInt, "out", status, req.Latitude, req.Longitude, req.PhotoSelfie, inRange, req.Force, time.Now(),
+	var attendanceID uuid.UUID
+	err = database.DB.QueryRow(
+		"INSERT INTO attendances (tenant_id, user_id, type, status, latitude, longitude, photo_selfie, in_range, force_attendance, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id",
+		tenantID, userID, "out", status, req.Latitude, req.Longitude, req.PhotoSelfie, inRange, req.Force, time.Now(),
 	).Scan(&attendanceID)
 
 	if err != nil {
@@ -317,12 +344,12 @@ func ClockOut(c *gin.Context) {
 	}
 
 	if config.IsDevelopment() {
-		fmt.Printf("🔵 ClockOut successful: attendanceID=%d, status=%s, inRange=%t\n", attendanceID, status, inRange)
+		fmt.Printf("🔵 ClockOut successful: attendanceID=%s, status=%s, inRange=%t\n", attendanceID, status, inRange)
 	}
 
 	response := AttendanceResponse{
 		ID:              attendanceID,
-		UserID:          userIDInt,
+		UserID:          userID,
 		Type:            "out",
 		Status:          status,
 		Latitude:        req.Latitude,
@@ -366,7 +393,7 @@ func GetAttendance(c *gin.Context) {
 		}
 	}()
 
-	userID, exists := c.Get("userID")
+	userIDVal, exists := c.Get("userID")
 	if !exists {
 		if config.IsDevelopment() {
 			fmt.Println("🔴 GetAttendance: userID not found in context")
@@ -375,17 +402,30 @@ func GetAttendance(c *gin.Context) {
 		return
 	}
 
-	userIDInt, ok := userID.(int)
-	if !ok {
-		if config.IsDevelopment() {
-			fmt.Println("🔴 GetAttendance: userID type assertion failed")
+	tenantIDStr := c.GetString("tenant_id")
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		utils.GinErrorResponse(c, http.StatusUnauthorized, "Invalid tenant ID")
+		return
+	}
+
+	var userID uuid.UUID
+	switch v := userIDVal.(type) {
+	case uuid.UUID:
+		userID = v
+	case string:
+		userID, err = uuid.Parse(v)
+		if err != nil {
+			utils.GinErrorResponse(c, http.StatusInternalServerError, "Invalid user ID format")
+			return
 		}
-		utils.GinErrorResponse(c, http.StatusInternalServerError, "Invalid user ID")
+	default:
+		utils.GinErrorResponse(c, http.StatusInternalServerError, "Invalid user ID type")
 		return
 	}
 
 	if config.IsDevelopment() {
-		fmt.Printf("🔵 GetAttendance: userID=%d\n", userIDInt)
+		fmt.Printf("🔵 GetAttendance: userID=%s\n", userID)
 	}
 
 	dateFilter := c.Query("date")
@@ -402,17 +442,16 @@ func GetAttendance(c *gin.Context) {
 	}
 
 	var rows *sql.Rows
-	var err error
 
 	if dateFilter != "" {
 		rows, err = database.DB.Query(
-			"SELECT id, user_id, type, status, latitude, longitude, photo_selfie, in_range, force_attendance, created_at FROM attendances WHERE user_id = $1 AND DATE(created_at) = $2 ORDER BY created_at DESC LIMIT $3",
-			userIDInt, dateFilter, limit,
+			"SELECT id, user_id, type, status, latitude, longitude, photo_selfie, in_range, force_attendance, created_at FROM attendances WHERE user_id = $1 AND tenant_id = $2 AND DATE(created_at) = $3 ORDER BY created_at DESC LIMIT $4",
+			userID, tenantID, dateFilter, limit,
 		)
 	} else {
 		rows, err = database.DB.Query(
-			"SELECT id, user_id, type, status, latitude, longitude, photo_selfie, in_range, force_attendance, created_at FROM attendances WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2",
-			userIDInt, limit,
+			"SELECT id, user_id, type, status, latitude, longitude, photo_selfie, in_range, force_attendance, created_at FROM attendances WHERE user_id = $1 AND tenant_id = $2 ORDER BY created_at DESC LIMIT $3",
+			userID, tenantID, limit,
 		)
 	}
 

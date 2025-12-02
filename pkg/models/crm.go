@@ -1,11 +1,16 @@
 package models
 
-import "time"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 // CRMProject represents a CRM deal / project in the sales pipeline
 // This is designed to be parallel with the mobile CRM UI and the projects table used in dashboard stats.
 type CRMProject struct {
-	ID            string    `json:"id"`
+	ID            uuid.UUID `json:"id"`
+	TenantID      uuid.UUID `json:"tenant_id"`
 	Title         string    `json:"title"`
 	Client        string    `json:"client"`
 	Value         float64   `json:"value"`
@@ -16,7 +21,7 @@ type CRMProject struct {
 	Description   string    `json:"description"`
 	Category      string    `json:"category"`      // e.g. 'godjah', 'godtive', 'godweb'
 	Status        string    `json:"status"`
-	ManagerID     string    `json:"manager_id"`
+	ManagerID     uuid.UUID `json:"manager_id"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
 }

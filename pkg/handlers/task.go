@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/nepskuy/be-godplan/pkg/database"
 	"github.com/nepskuy/be-godplan/pkg/models"
 	"github.com/nepskuy/be-godplan/pkg/repository"
@@ -24,17 +25,39 @@ var (
 // @Success 200 {object} utils.GinResponse
 // @Router /tasks [get]
 func GetTasks(c *gin.Context) {
-	userID, exists := c.Get("userID")
+	userIDVal, exists := c.Get("userID")
 	if !exists {
 		utils.GinErrorResponse(c, 401, "Unauthorized")
 		return
 	}
 
+	tenantIDStr := c.GetString("tenant_id")
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		utils.GinErrorResponse(c, 401, "Invalid tenant ID")
+		return
+	}
+
+	var userID uuid.UUID
+	switch v := userIDVal.(type) {
+	case uuid.UUID:
+		userID = v
+	case string:
+		userID, err = uuid.Parse(v)
+		if err != nil {
+			utils.GinErrorResponse(c, 500, "Invalid user ID format")
+			return
+		}
+	default:
+		utils.GinErrorResponse(c, 500, "Invalid user ID type")
+		return
+	}
+
 	// Cari employee_id berdasarkan user_id
-	var employeeID string
-	err := database.DB.QueryRow(`
-		SELECT id FROM godplan.employees WHERE user_id = $1
-	`, userID).Scan(&employeeID)
+	var employeeID uuid.UUID
+	err = database.DB.QueryRow(`
+		SELECT id FROM godplan.employees WHERE user_id = $1 AND tenant_id = $2
+	`, userID, tenantID).Scan(&employeeID)
 
 	if err != nil {
 		// Jika tidak ada employee record, return empty array
@@ -42,7 +65,7 @@ func GetTasks(c *gin.Context) {
 		return
 	}
 
-	tasks, err := taskService.GetTasksByAssignee(employeeID)
+	tasks, err := taskService.GetTasksByAssignee(tenantID, employeeID)
 	if err != nil {
 		utils.GinErrorResponse(c, 500, "Failed to fetch tasks")
 		return
@@ -62,9 +85,31 @@ func GetTasks(c *gin.Context) {
 // @Success 201 {object} utils.GinResponse
 // @Router /tasks [post]
 func CreateTask(c *gin.Context) {
-	userID, exists := c.Get("userID")
+	userIDVal, exists := c.Get("userID")
 	if !exists {
 		utils.GinErrorResponse(c, 401, "Unauthorized")
+		return
+	}
+
+	tenantIDStr := c.GetString("tenant_id")
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		utils.GinErrorResponse(c, 401, "Invalid tenant ID")
+		return
+	}
+
+	var userID uuid.UUID
+	switch v := userIDVal.(type) {
+	case uuid.UUID:
+		userID = v
+	case string:
+		userID, err = uuid.Parse(v)
+		if err != nil {
+			utils.GinErrorResponse(c, 500, "Invalid user ID format")
+			return
+		}
+	default:
+		utils.GinErrorResponse(c, 500, "Invalid user ID type")
 		return
 	}
 
@@ -80,21 +125,40 @@ func CreateTask(c *gin.Context) {
 		return
 	}
 
+	var assigneeID uuid.UUID
 	// Jika assignee_id kosong, gunakan employee_id dari user yang login
 	if taskReq.AssigneeID == "" {
 		err := database.DB.QueryRow(`
-			SELECT id FROM godplan.employees WHERE user_id = $1
-		`, userID).Scan(&taskReq.AssigneeID)
+			SELECT id FROM godplan.employees WHERE user_id = $1 AND tenant_id = $2
+		`, userID, tenantID).Scan(&assigneeID)
 
 		if err != nil {
 			utils.GinErrorResponse(c, 400, "User doesn't have employee record")
 			return
 		}
+	} else {
+		var err error
+		assigneeID, err = uuid.Parse(taskReq.AssigneeID)
+		if err != nil {
+			utils.GinErrorResponse(c, 400, "Invalid assignee ID")
+			return
+		}
+	}
+
+	var projectID uuid.UUID
+	if taskReq.ProjectID != "" {
+		var err error
+		projectID, err = uuid.Parse(taskReq.ProjectID)
+		if err != nil {
+			utils.GinErrorResponse(c, 400, "Invalid project ID")
+			return
+		}
 	}
 
 	task := &models.Task{
-		ProjectID:      taskReq.ProjectID,
-		AssigneeID:     taskReq.AssigneeID,
+		TenantID:       tenantID,
+		ProjectID:      projectID,
+		AssigneeID:     assigneeID,
 		Title:          taskReq.Title,
 		Description:    taskReq.Description,
 		Completed:      taskReq.Completed,
@@ -107,7 +171,7 @@ func CreateTask(c *gin.Context) {
 		Status:         taskReq.Status,
 	}
 
-	err := taskService.CreateTask(task)
+	err = taskService.CreateTask(task)
 	if err != nil {
 		utils.GinErrorResponse(c, 500, "Failed to create task")
 		return
@@ -127,19 +191,46 @@ func CreateTask(c *gin.Context) {
 // @Success 200 {object} utils.GinResponse
 // @Router /tasks/{id} [get]
 func GetTask(c *gin.Context) {
-	userID, exists := c.Get("userID")
+	userIDVal, exists := c.Get("userID")
 	if !exists {
 		utils.GinErrorResponse(c, 401, "Unauthorized")
 		return
 	}
 
-	taskID := c.Param("id")
+	tenantIDStr := c.GetString("tenant_id")
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		utils.GinErrorResponse(c, 401, "Invalid tenant ID")
+		return
+	}
+
+	var userID uuid.UUID
+	switch v := userIDVal.(type) {
+	case uuid.UUID:
+		userID = v
+	case string:
+		userID, err = uuid.Parse(v)
+		if err != nil {
+			utils.GinErrorResponse(c, 500, "Invalid user ID format")
+			return
+		}
+	default:
+		utils.GinErrorResponse(c, 500, "Invalid user ID type")
+		return
+	}
+
+	taskIDStr := c.Param("id")
+	taskID, err := uuid.Parse(taskIDStr)
+	if err != nil {
+		utils.GinErrorResponse(c, 400, "Invalid task ID")
+		return
+	}
 
 	// Cari employee_id berdasarkan user_id
-	var employeeID string
-	err := database.DB.QueryRow(`
-		SELECT id FROM godplan.employees WHERE user_id = $1
-	`, userID).Scan(&employeeID)
+	var employeeID uuid.UUID
+	err = database.DB.QueryRow(`
+		SELECT id FROM godplan.employees WHERE user_id = $1 AND tenant_id = $2
+	`, userID, tenantID).Scan(&employeeID)
 
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "Employee record not found")
@@ -147,7 +238,7 @@ func GetTask(c *gin.Context) {
 	}
 
 	// Validate task access
-	hasAccess, err := taskService.ValidateTaskAccess(taskID, employeeID)
+	hasAccess, err := taskService.ValidateTaskAccess(tenantID, taskID, employeeID)
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "Task not found")
 		return
@@ -158,7 +249,7 @@ func GetTask(c *gin.Context) {
 		return
 	}
 
-	task, err := taskService.GetTaskByID(taskID)
+	task, err := taskService.GetTaskByID(tenantID, taskID)
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "Task not found")
 		return
@@ -179,19 +270,46 @@ func GetTask(c *gin.Context) {
 // @Success 200 {object} utils.GinResponse
 // @Router /tasks/{id} [put]
 func UpdateTask(c *gin.Context) {
-	userID, exists := c.Get("userID")
+	userIDVal, exists := c.Get("userID")
 	if !exists {
 		utils.GinErrorResponse(c, 401, "Unauthorized")
 		return
 	}
 
-	taskID := c.Param("id")
+	tenantIDStr := c.GetString("tenant_id")
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		utils.GinErrorResponse(c, 401, "Invalid tenant ID")
+		return
+	}
+
+	var userID uuid.UUID
+	switch v := userIDVal.(type) {
+	case uuid.UUID:
+		userID = v
+	case string:
+		userID, err = uuid.Parse(v)
+		if err != nil {
+			utils.GinErrorResponse(c, 500, "Invalid user ID format")
+			return
+		}
+	default:
+		utils.GinErrorResponse(c, 500, "Invalid user ID type")
+		return
+	}
+
+	taskIDStr := c.Param("id")
+	taskID, err := uuid.Parse(taskIDStr)
+	if err != nil {
+		utils.GinErrorResponse(c, 400, "Invalid task ID")
+		return
+	}
 
 	// Cari employee_id berdasarkan user_id
-	var employeeID string
-	err := database.DB.QueryRow(`
-		SELECT id FROM godplan.employees WHERE user_id = $1
-	`, userID).Scan(&employeeID)
+	var employeeID uuid.UUID
+	err = database.DB.QueryRow(`
+		SELECT id FROM godplan.employees WHERE user_id = $1 AND tenant_id = $2
+	`, userID, tenantID).Scan(&employeeID)
 
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "Employee record not found")
@@ -199,7 +317,7 @@ func UpdateTask(c *gin.Context) {
 	}
 
 	// Validate task access
-	hasAccess, err := taskService.ValidateTaskAccess(taskID, employeeID)
+	hasAccess, err := taskService.ValidateTaskAccess(tenantID, taskID, employeeID)
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "Task not found")
 		return
@@ -217,15 +335,35 @@ func UpdateTask(c *gin.Context) {
 	}
 
 	// Get existing task
-	existingTask, err := taskService.GetTaskByID(taskID)
+	existingTask, err := taskService.GetTaskByID(tenantID, taskID)
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "Task not found")
 		return
 	}
 
+	var projectID uuid.UUID
+	if taskReq.ProjectID != "" {
+		projectID, err = uuid.Parse(taskReq.ProjectID)
+		if err != nil {
+			utils.GinErrorResponse(c, 400, "Invalid project ID")
+			return
+		}
+	}
+
+	var assigneeID uuid.UUID
+	if taskReq.AssigneeID != "" {
+		assigneeID, err = uuid.Parse(taskReq.AssigneeID)
+		if err != nil {
+			utils.GinErrorResponse(c, 400, "Invalid assignee ID")
+			return
+		}
+	} else {
+		assigneeID = existingTask.AssigneeID
+	}
+
 	// Update task fields
-	existingTask.ProjectID = taskReq.ProjectID
-	existingTask.AssigneeID = taskReq.AssigneeID
+	existingTask.ProjectID = projectID
+	existingTask.AssigneeID = assigneeID
 	existingTask.Title = taskReq.Title
 	existingTask.Description = taskReq.Description
 	existingTask.Completed = taskReq.Completed
@@ -257,19 +395,46 @@ func UpdateTask(c *gin.Context) {
 // @Success 200 {object} utils.GinResponse
 // @Router /tasks/{id} [delete]
 func DeleteTask(c *gin.Context) {
-	userID, exists := c.Get("userID")
+	userIDVal, exists := c.Get("userID")
 	if !exists {
 		utils.GinErrorResponse(c, 401, "Unauthorized")
 		return
 	}
 
-	taskID := c.Param("id")
+	tenantIDStr := c.GetString("tenant_id")
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		utils.GinErrorResponse(c, 401, "Invalid tenant ID")
+		return
+	}
+
+	var userID uuid.UUID
+	switch v := userIDVal.(type) {
+	case uuid.UUID:
+		userID = v
+	case string:
+		userID, err = uuid.Parse(v)
+		if err != nil {
+			utils.GinErrorResponse(c, 500, "Invalid user ID format")
+			return
+		}
+	default:
+		utils.GinErrorResponse(c, 500, "Invalid user ID type")
+		return
+	}
+
+	taskIDStr := c.Param("id")
+	taskID, err := uuid.Parse(taskIDStr)
+	if err != nil {
+		utils.GinErrorResponse(c, 400, "Invalid task ID")
+		return
+	}
 
 	// Cari employee_id berdasarkan user_id
-	var employeeID string
-	err := database.DB.QueryRow(`
-		SELECT id FROM godplan.employees WHERE user_id = $1
-	`, userID).Scan(&employeeID)
+	var employeeID uuid.UUID
+	err = database.DB.QueryRow(`
+		SELECT id FROM godplan.employees WHERE user_id = $1 AND tenant_id = $2
+	`, userID, tenantID).Scan(&employeeID)
 
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "Employee record not found")
@@ -277,7 +442,7 @@ func DeleteTask(c *gin.Context) {
 	}
 
 	// Validate task access
-	hasAccess, err := taskService.ValidateTaskAccess(taskID, employeeID)
+	hasAccess, err := taskService.ValidateTaskAccess(tenantID, taskID, employeeID)
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "Task not found")
 		return
@@ -288,7 +453,7 @@ func DeleteTask(c *gin.Context) {
 		return
 	}
 
-	err = taskService.DeleteTask(taskID)
+	err = taskService.DeleteTask(tenantID, taskID)
 	if err != nil {
 		if err == repository.ErrTaskNotFound {
 			utils.GinErrorResponse(c, 404, "Task not found")
@@ -311,17 +476,39 @@ func DeleteTask(c *gin.Context) {
 // @Success 200 {object} utils.GinResponse
 // @Router /tasks/upcoming [get]
 func GetUpcomingTasks(c *gin.Context) {
-	userID, exists := c.Get("userID")
+	userIDVal, exists := c.Get("userID")
 	if !exists {
 		utils.GinErrorResponse(c, 401, "Unauthorized")
 		return
 	}
 
+	tenantIDStr := c.GetString("tenant_id")
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		utils.GinErrorResponse(c, 401, "Invalid tenant ID")
+		return
+	}
+
+	var userID uuid.UUID
+	switch v := userIDVal.(type) {
+	case uuid.UUID:
+		userID = v
+	case string:
+		userID, err = uuid.Parse(v)
+		if err != nil {
+			utils.GinErrorResponse(c, 500, "Invalid user ID format")
+			return
+		}
+	default:
+		utils.GinErrorResponse(c, 500, "Invalid user ID type")
+		return
+	}
+
 	// Cari employee_id berdasarkan user_id
-	var employeeID string
-	err := database.DB.QueryRow(`
-		SELECT id FROM godplan.employees WHERE user_id = $1
-	`, userID).Scan(&employeeID)
+	var employeeID uuid.UUID
+	err = database.DB.QueryRow(`
+		SELECT id FROM godplan.employees WHERE user_id = $1 AND tenant_id = $2
+	`, userID, tenantID).Scan(&employeeID)
 
 	if err != nil {
 		// Jika tidak ada employee record, return empty array
@@ -329,7 +516,7 @@ func GetUpcomingTasks(c *gin.Context) {
 		return
 	}
 
-	tasks, err := taskService.GetUpcomingTasks(employeeID, 3)
+	tasks, err := taskService.GetUpcomingTasks(tenantID, employeeID, 3)
 	if err != nil {
 		utils.GinErrorResponse(c, 500, "Failed to fetch upcoming tasks")
 		return
@@ -350,19 +537,46 @@ func GetUpcomingTasks(c *gin.Context) {
 // @Success 200 {object} utils.GinResponse
 // @Router /tasks/{id}/toggle [patch]
 func ToggleTaskCompletion(c *gin.Context) {
-	userID, exists := c.Get("userID")
+	userIDVal, exists := c.Get("userID")
 	if !exists {
 		utils.GinErrorResponse(c, 401, "Unauthorized")
 		return
 	}
 
-	taskID := c.Param("id")
+	tenantIDStr := c.GetString("tenant_id")
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		utils.GinErrorResponse(c, 401, "Invalid tenant ID")
+		return
+	}
+
+	var userID uuid.UUID
+	switch v := userIDVal.(type) {
+	case uuid.UUID:
+		userID = v
+	case string:
+		userID, err = uuid.Parse(v)
+		if err != nil {
+			utils.GinErrorResponse(c, 500, "Invalid user ID format")
+			return
+		}
+	default:
+		utils.GinErrorResponse(c, 500, "Invalid user ID type")
+		return
+	}
+
+	taskIDStr := c.Param("id")
+	taskID, err := uuid.Parse(taskIDStr)
+	if err != nil {
+		utils.GinErrorResponse(c, 400, "Invalid task ID")
+		return
+	}
 
 	// Cari employee_id berdasarkan user_id
-	var employeeID string
-	err := database.DB.QueryRow(`
-		SELECT id FROM godplan.employees WHERE user_id = $1
-	`, userID).Scan(&employeeID)
+	var employeeID uuid.UUID
+	err = database.DB.QueryRow(`
+		SELECT id FROM godplan.employees WHERE user_id = $1 AND tenant_id = $2
+	`, userID, tenantID).Scan(&employeeID)
 
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "Employee record not found")
@@ -370,7 +584,7 @@ func ToggleTaskCompletion(c *gin.Context) {
 	}
 
 	// Validate task access
-	hasAccess, err := taskService.ValidateTaskAccess(taskID, employeeID)
+	hasAccess, err := taskService.ValidateTaskAccess(tenantID, taskID, employeeID)
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "Task not found")
 		return
@@ -387,13 +601,13 @@ func ToggleTaskCompletion(c *gin.Context) {
 		return
 	}
 
-	err = taskService.ToggleTaskCompletion(taskID, toggleReq.Completed)
+	err = taskService.ToggleTaskCompletion(tenantID, taskID, toggleReq.Completed)
 	if err != nil {
 		utils.GinErrorResponse(c, 500, "Failed to toggle task completion")
 		return
 	}
 
-	task, err := taskService.GetTaskByID(taskID)
+	task, err := taskService.GetTaskByID(tenantID, taskID)
 	if err != nil {
 		utils.GinErrorResponse(c, 500, "Task updated but failed to retrieve")
 		return
@@ -414,19 +628,46 @@ func ToggleTaskCompletion(c *gin.Context) {
 // @Success 200 {object} utils.GinResponse
 // @Router /tasks/{id}/category [patch]
 func UpdateTaskCategory(c *gin.Context) {
-	userID, exists := c.Get("userID")
+	userIDVal, exists := c.Get("userID")
 	if !exists {
 		utils.GinErrorResponse(c, 401, "Unauthorized")
 		return
 	}
 
-	taskID := c.Param("id")
+	tenantIDStr := c.GetString("tenant_id")
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		utils.GinErrorResponse(c, 401, "Invalid tenant ID")
+		return
+	}
+
+	var userID uuid.UUID
+	switch v := userIDVal.(type) {
+	case uuid.UUID:
+		userID = v
+	case string:
+		userID, err = uuid.Parse(v)
+		if err != nil {
+			utils.GinErrorResponse(c, 500, "Invalid user ID format")
+			return
+		}
+	default:
+		utils.GinErrorResponse(c, 500, "Invalid user ID type")
+		return
+	}
+
+	taskIDStr := c.Param("id")
+	taskID, err := uuid.Parse(taskIDStr)
+	if err != nil {
+		utils.GinErrorResponse(c, 400, "Invalid task ID")
+		return
+	}
 
 	// Cari employee_id berdasarkan user_id
-	var employeeID string
-	err := database.DB.QueryRow(`
-		SELECT id FROM godplan.employees WHERE user_id = $1
-	`, userID).Scan(&employeeID)
+	var employeeID uuid.UUID
+	err = database.DB.QueryRow(`
+		SELECT id FROM godplan.employees WHERE user_id = $1 AND tenant_id = $2
+	`, userID, tenantID).Scan(&employeeID)
 
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "Employee record not found")
@@ -434,7 +675,7 @@ func UpdateTaskCategory(c *gin.Context) {
 	}
 
 	// Validate task access
-	hasAccess, err := taskService.ValidateTaskAccess(taskID, employeeID)
+	hasAccess, err := taskService.ValidateTaskAccess(tenantID, taskID, employeeID)
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "Task not found")
 		return
@@ -451,13 +692,13 @@ func UpdateTaskCategory(c *gin.Context) {
 		return
 	}
 
-	err = taskService.UpdateTaskCategory(taskID, categoryReq.Category)
+	err = taskService.UpdateTaskCategory(tenantID, taskID, categoryReq.Category)
 	if err != nil {
 		utils.GinErrorResponse(c, 500, "Failed to update task category")
 		return
 	}
 
-	task, err := taskService.GetTaskByID(taskID)
+	task, err := taskService.GetTaskByID(tenantID, taskID)
 	if err != nil {
 		utils.GinErrorResponse(c, 500, "Category updated but failed to retrieve task")
 		return
@@ -478,19 +719,46 @@ func UpdateTaskCategory(c *gin.Context) {
 // @Success 200 {object} utils.GinResponse
 // @Router /tasks/{id}/progress [patch]
 func UpdateTaskProgress(c *gin.Context) {
-	userID, exists := c.Get("userID")
+	userIDVal, exists := c.Get("userID")
 	if !exists {
 		utils.GinErrorResponse(c, 401, "Unauthorized")
 		return
 	}
 
-	taskID := c.Param("id")
+	tenantIDStr := c.GetString("tenant_id")
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		utils.GinErrorResponse(c, 401, "Invalid tenant ID")
+		return
+	}
+
+	var userID uuid.UUID
+	switch v := userIDVal.(type) {
+	case uuid.UUID:
+		userID = v
+	case string:
+		userID, err = uuid.Parse(v)
+		if err != nil {
+			utils.GinErrorResponse(c, 500, "Invalid user ID format")
+			return
+		}
+	default:
+		utils.GinErrorResponse(c, 500, "Invalid user ID type")
+		return
+	}
+
+	taskIDStr := c.Param("id")
+	taskID, err := uuid.Parse(taskIDStr)
+	if err != nil {
+		utils.GinErrorResponse(c, 400, "Invalid task ID")
+		return
+	}
 
 	// Cari employee_id berdasarkan user_id
-	var employeeID string
-	err := database.DB.QueryRow(`
-		SELECT id FROM godplan.employees WHERE user_id = $1
-	`, userID).Scan(&employeeID)
+	var employeeID uuid.UUID
+	err = database.DB.QueryRow(`
+		SELECT id FROM godplan.employees WHERE user_id = $1 AND tenant_id = $2
+	`, userID, tenantID).Scan(&employeeID)
 
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "Employee record not found")
@@ -498,7 +766,7 @@ func UpdateTaskProgress(c *gin.Context) {
 	}
 
 	// Validate task access
-	hasAccess, err := taskService.ValidateTaskAccess(taskID, employeeID)
+	hasAccess, err := taskService.ValidateTaskAccess(tenantID, taskID, employeeID)
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "Task not found")
 		return
@@ -518,7 +786,7 @@ func UpdateTaskProgress(c *gin.Context) {
 		return
 	}
 
-	err = taskService.UpdateTaskProgress(taskID, progressReq.Progress)
+	err = taskService.UpdateTaskProgress(tenantID, taskID, progressReq.Progress)
 	if err != nil {
 		if err == repository.ErrInvalidProgress {
 			utils.GinErrorResponse(c, 400, "Progress must be between 0 and 100")
@@ -528,7 +796,7 @@ func UpdateTaskProgress(c *gin.Context) {
 		return
 	}
 
-	task, err := taskService.GetTaskByID(taskID)
+	task, err := taskService.GetTaskByID(tenantID, taskID)
 	if err != nil {
 		utils.GinErrorResponse(c, 500, "Progress updated but failed to retrieve task")
 		return
@@ -548,19 +816,46 @@ func UpdateTaskProgress(c *gin.Context) {
 // @Success 200 {object} utils.GinResponse
 // @Router /tasks/{id}/complete [patch]
 func CompleteTask(c *gin.Context) {
-	userID, exists := c.Get("userID")
+	userIDVal, exists := c.Get("userID")
 	if !exists {
 		utils.GinErrorResponse(c, 401, "Unauthorized")
 		return
 	}
 
-	taskID := c.Param("id")
+	tenantIDStr := c.GetString("tenant_id")
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		utils.GinErrorResponse(c, 401, "Invalid tenant ID")
+		return
+	}
+
+	var userID uuid.UUID
+	switch v := userIDVal.(type) {
+	case uuid.UUID:
+		userID = v
+	case string:
+		userID, err = uuid.Parse(v)
+		if err != nil {
+			utils.GinErrorResponse(c, 500, "Invalid user ID format")
+			return
+		}
+	default:
+		utils.GinErrorResponse(c, 500, "Invalid user ID type")
+		return
+	}
+
+	taskIDStr := c.Param("id")
+	taskID, err := uuid.Parse(taskIDStr)
+	if err != nil {
+		utils.GinErrorResponse(c, 400, "Invalid task ID")
+		return
+	}
 
 	// Cari employee_id berdasarkan user_id
-	var employeeID string
-	err := database.DB.QueryRow(`
-		SELECT id FROM godplan.employees WHERE user_id = $1
-	`, userID).Scan(&employeeID)
+	var employeeID uuid.UUID
+	err = database.DB.QueryRow(`
+		SELECT id FROM godplan.employees WHERE user_id = $1 AND tenant_id = $2
+	`, userID, tenantID).Scan(&employeeID)
 
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "Employee record not found")
@@ -568,7 +863,7 @@ func CompleteTask(c *gin.Context) {
 	}
 
 	// Validate task access
-	hasAccess, err := taskService.ValidateTaskAccess(taskID, employeeID)
+	hasAccess, err := taskService.ValidateTaskAccess(tenantID, taskID, employeeID)
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "Task not found")
 		return
@@ -579,13 +874,13 @@ func CompleteTask(c *gin.Context) {
 		return
 	}
 
-	err = taskService.CompleteTask(taskID)
+	err = taskService.CompleteTask(tenantID, taskID)
 	if err != nil {
 		utils.GinErrorResponse(c, 500, "Failed to complete task")
 		return
 	}
 
-	task, err := taskService.GetTaskByID(taskID)
+	task, err := taskService.GetTaskByID(tenantID, taskID)
 	if err != nil {
 		utils.GinErrorResponse(c, 500, "Task completed but failed to retrieve")
 		return
@@ -604,17 +899,39 @@ func CompleteTask(c *gin.Context) {
 // @Success 200 {object} utils.GinResponse
 // @Router /tasks/statistics [get]
 func GetTaskStatistics(c *gin.Context) {
-	userID, exists := c.Get("userID")
+	userIDVal, exists := c.Get("userID")
 	if !exists {
 		utils.GinErrorResponse(c, 401, "Unauthorized")
 		return
 	}
 
+	tenantIDStr := c.GetString("tenant_id")
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		utils.GinErrorResponse(c, 401, "Invalid tenant ID")
+		return
+	}
+
+	var userID uuid.UUID
+	switch v := userIDVal.(type) {
+	case uuid.UUID:
+		userID = v
+	case string:
+		userID, err = uuid.Parse(v)
+		if err != nil {
+			utils.GinErrorResponse(c, 500, "Invalid user ID format")
+			return
+		}
+	default:
+		utils.GinErrorResponse(c, 500, "Invalid user ID type")
+		return
+	}
+
 	// Cari employee_id berdasarkan user_id
-	var employeeID string
-	err := database.DB.QueryRow(`
-		SELECT id FROM godplan.employees WHERE user_id = $1
-	`, userID).Scan(&employeeID)
+	var employeeID uuid.UUID
+	err = database.DB.QueryRow(`
+		SELECT id FROM godplan.employees WHERE user_id = $1 AND tenant_id = $2
+	`, userID, tenantID).Scan(&employeeID)
 
 	if err != nil {
 		// Jika tidak ada employee record, return empty statistics
@@ -622,7 +939,7 @@ func GetTaskStatistics(c *gin.Context) {
 		return
 	}
 
-	statistics, err := taskService.GetTaskStatistics(employeeID)
+	statistics, err := taskService.GetTaskStatistics(tenantID, employeeID)
 	if err != nil {
 		utils.GinErrorResponse(c, 500, "Failed to fetch task statistics")
 		return

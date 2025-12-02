@@ -2,11 +2,14 @@ package models
 
 import (
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type Attendance struct {
-	ID              int       `json:"id"`
-	UserID          int       `json:"user_id"`
+	ID              uuid.UUID `json:"id"`
+	TenantID        uuid.UUID `json:"tenant_id"`
+	UserID          uuid.UUID `json:"user_id"`
 	Type            string    `json:"type"`
 	Status          string    `json:"status"`
 	Latitude        float64   `json:"latitude"`

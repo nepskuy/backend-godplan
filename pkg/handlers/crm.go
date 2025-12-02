@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/nepskuy/be-godplan/pkg/database"
 	"github.com/nepskuy/be-godplan/pkg/models"
 	"github.com/nepskuy/be-godplan/pkg/repository"
@@ -24,17 +25,39 @@ var (
 // @Success 200 {object} utils.GinResponse
 // @Router /crm/projects [get]
 func GetCRMProjects(c *gin.Context) {
-	userID, exists := c.Get("userID")
+	userIDVal, exists := c.Get("userID")
 	if !exists {
 		utils.GinErrorResponse(c, 401, "Unauthorized")
 		return
 	}
 
+	tenantIDStr := c.GetString("tenant_id")
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		utils.GinErrorResponse(c, 401, "Invalid tenant ID")
+		return
+	}
+
+	var userID uuid.UUID
+	switch v := userIDVal.(type) {
+	case uuid.UUID:
+		userID = v
+	case string:
+		userID, err = uuid.Parse(v)
+		if err != nil {
+			utils.GinErrorResponse(c, 500, "Invalid user ID format")
+			return
+		}
+	default:
+		utils.GinErrorResponse(c, 500, "Invalid user ID type")
+		return
+	}
+
 	// Map user_id -> employee_id (same pattern as tasks)
-	var managerID string
-	err := database.DB.QueryRow(`
-		SELECT id FROM godplan.employees WHERE user_id = $1
-	`, userID).Scan(&managerID)
+	var managerID uuid.UUID
+	err = database.DB.QueryRow(`
+		SELECT id FROM godplan.employees WHERE user_id = $1 AND tenant_id = $2
+	`, userID, tenantID).Scan(&managerID)
 
 	if err != nil {
 		// If no employee record, return empty list
@@ -42,7 +65,7 @@ func GetCRMProjects(c *gin.Context) {
 		return
 	}
 
-	projects, err := crmService.GetProjectsByManager(managerID)
+	projects, err := crmService.GetProjectsByManager(tenantID, managerID)
 	if err != nil {
 		utils.GinErrorResponse(c, 500, "Failed to fetch CRM projects")
 		return
@@ -62,16 +85,38 @@ func GetCRMProjects(c *gin.Context) {
 // @Success 201 {object} utils.GinResponse
 // @Router /crm/projects [post]
 func CreateCRMProject(c *gin.Context) {
-	userID, exists := c.Get("userID")
+	userIDVal, exists := c.Get("userID")
 	if !exists {
 		utils.GinErrorResponse(c, 401, "Unauthorized")
 		return
 	}
 
-	var managerID string
+	tenantIDStr := c.GetString("tenant_id")
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		utils.GinErrorResponse(c, 401, "Invalid tenant ID")
+		return
+	}
+
+	var userID uuid.UUID
+	switch v := userIDVal.(type) {
+	case uuid.UUID:
+		userID = v
+	case string:
+		userID, err = uuid.Parse(v)
+		if err != nil {
+			utils.GinErrorResponse(c, 500, "Invalid user ID format")
+			return
+		}
+	default:
+		utils.GinErrorResponse(c, 500, "Invalid user ID type")
+		return
+	}
+
+	var managerID uuid.UUID
 	if err := database.DB.QueryRow(`
-		SELECT id FROM godplan.employees WHERE user_id = $1
-	`, userID).Scan(&managerID); err != nil {
+		SELECT id FROM godplan.employees WHERE user_id = $1 AND tenant_id = $2
+	`, userID, tenantID).Scan(&managerID); err != nil {
 		utils.GinErrorResponse(c, 400, "User doesn't have employee record")
 		return
 	}
@@ -83,6 +128,7 @@ func CreateCRMProject(c *gin.Context) {
 	}
 
 	project := &models.CRMProject{
+		TenantID:      tenantID,
 		Title:         req.Title,
 		Client:        req.Client,
 		Value:         req.Value,
@@ -115,24 +161,51 @@ func CreateCRMProject(c *gin.Context) {
 // @Success 200 {object} utils.GinResponse
 // @Router /crm/projects/{id} [get]
 func GetCRMProject(c *gin.Context) {
-	userID, exists := c.Get("userID")
+	userIDVal, exists := c.Get("userID")
 	if !exists {
 		utils.GinErrorResponse(c, 401, "Unauthorized")
 		return
 	}
 
-	projectID := c.Param("id")
+	tenantIDStr := c.GetString("tenant_id")
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		utils.GinErrorResponse(c, 401, "Invalid tenant ID")
+		return
+	}
 
-	var managerID string
-	err := database.DB.QueryRow(`
-		SELECT id FROM godplan.employees WHERE user_id = $1
-	`, userID).Scan(&managerID)
+	var userID uuid.UUID
+	switch v := userIDVal.(type) {
+	case uuid.UUID:
+		userID = v
+	case string:
+		userID, err = uuid.Parse(v)
+		if err != nil {
+			utils.GinErrorResponse(c, 500, "Invalid user ID format")
+			return
+		}
+	default:
+		utils.GinErrorResponse(c, 500, "Invalid user ID type")
+		return
+	}
+
+	projectIDStr := c.Param("id")
+	projectID, err := uuid.Parse(projectIDStr)
+	if err != nil {
+		utils.GinErrorResponse(c, 400, "Invalid project ID")
+		return
+	}
+
+	var managerID uuid.UUID
+	err = database.DB.QueryRow(`
+		SELECT id FROM godplan.employees WHERE user_id = $1 AND tenant_id = $2
+	`, userID, tenantID).Scan(&managerID)
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "Employee record not found")
 		return
 	}
 
-	hasAccess, err := crmService.ValidateProjectAccess(projectID, managerID)
+	hasAccess, err := crmService.ValidateProjectAccess(tenantID, projectID, managerID)
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "CRM project not found")
 		return
@@ -142,7 +215,7 @@ func GetCRMProject(c *gin.Context) {
 		return
 	}
 
-	project, err := crmService.GetProjectByID(projectID)
+	project, err := crmService.GetProjectByID(tenantID, projectID)
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "CRM project not found")
 		return
@@ -163,24 +236,51 @@ func GetCRMProject(c *gin.Context) {
 // @Success 200 {object} utils.GinResponse
 // @Router /crm/projects/{id} [put]
 func UpdateCRMProject(c *gin.Context) {
-	userID, exists := c.Get("userID")
+	userIDVal, exists := c.Get("userID")
 	if !exists {
 		utils.GinErrorResponse(c, 401, "Unauthorized")
 		return
 	}
 
-	projectID := c.Param("id")
+	tenantIDStr := c.GetString("tenant_id")
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		utils.GinErrorResponse(c, 401, "Invalid tenant ID")
+		return
+	}
 
-	var managerID string
-	err := database.DB.QueryRow(`
-		SELECT id FROM godplan.employees WHERE user_id = $1
-	`, userID).Scan(&managerID)
+	var userID uuid.UUID
+	switch v := userIDVal.(type) {
+	case uuid.UUID:
+		userID = v
+	case string:
+		userID, err = uuid.Parse(v)
+		if err != nil {
+			utils.GinErrorResponse(c, 500, "Invalid user ID format")
+			return
+		}
+	default:
+		utils.GinErrorResponse(c, 500, "Invalid user ID type")
+		return
+	}
+
+	projectIDStr := c.Param("id")
+	projectID, err := uuid.Parse(projectIDStr)
+	if err != nil {
+		utils.GinErrorResponse(c, 400, "Invalid project ID")
+		return
+	}
+
+	var managerID uuid.UUID
+	err = database.DB.QueryRow(`
+		SELECT id FROM godplan.employees WHERE user_id = $1 AND tenant_id = $2
+	`, userID, tenantID).Scan(&managerID)
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "Employee record not found")
 		return
 	}
 
-	hasAccess, err := crmService.ValidateProjectAccess(projectID, managerID)
+	hasAccess, err := crmService.ValidateProjectAccess(tenantID, projectID, managerID)
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "CRM project not found")
 		return
@@ -196,7 +296,7 @@ func UpdateCRMProject(c *gin.Context) {
 		return
 	}
 
-	project, err := crmService.GetProjectByID(projectID)
+	project, err := crmService.GetProjectByID(tenantID, projectID)
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "CRM project not found")
 		return
@@ -232,24 +332,51 @@ func UpdateCRMProject(c *gin.Context) {
 // @Success 200 {object} utils.GinResponse
 // @Router /crm/projects/{id} [delete]
 func DeleteCRMProject(c *gin.Context) {
-	userID, exists := c.Get("userID")
+	userIDVal, exists := c.Get("userID")
 	if !exists {
 		utils.GinErrorResponse(c, 401, "Unauthorized")
 		return
 	}
 
-	projectID := c.Param("id")
+	tenantIDStr := c.GetString("tenant_id")
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		utils.GinErrorResponse(c, 401, "Invalid tenant ID")
+		return
+	}
 
-	var managerID string
-	err := database.DB.QueryRow(`
-		SELECT id FROM godplan.employees WHERE user_id = $1
-	`, userID).Scan(&managerID)
+	var userID uuid.UUID
+	switch v := userIDVal.(type) {
+	case uuid.UUID:
+		userID = v
+	case string:
+		userID, err = uuid.Parse(v)
+		if err != nil {
+			utils.GinErrorResponse(c, 500, "Invalid user ID format")
+			return
+		}
+	default:
+		utils.GinErrorResponse(c, 500, "Invalid user ID type")
+		return
+	}
+
+	projectIDStr := c.Param("id")
+	projectID, err := uuid.Parse(projectIDStr)
+	if err != nil {
+		utils.GinErrorResponse(c, 400, "Invalid project ID")
+		return
+	}
+
+	var managerID uuid.UUID
+	err = database.DB.QueryRow(`
+		SELECT id FROM godplan.employees WHERE user_id = $1 AND tenant_id = $2
+	`, userID, tenantID).Scan(&managerID)
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "Employee record not found")
 		return
 	}
 
-	hasAccess, err := crmService.ValidateProjectAccess(projectID, managerID)
+	hasAccess, err := crmService.ValidateProjectAccess(tenantID, projectID, managerID)
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "CRM project not found")
 		return
@@ -259,7 +386,7 @@ func DeleteCRMProject(c *gin.Context) {
 		return
 	}
 
-	if err := crmService.DeleteProject(projectID); err != nil {
+	if err := crmService.DeleteProject(tenantID, projectID); err != nil {
 		utils.GinErrorResponse(c, 500, "Failed to delete CRM project")
 		return
 	}

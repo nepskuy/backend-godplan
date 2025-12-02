@@ -1,5 +1,7 @@
 package models
 
+import "github.com/google/uuid"
+
 type DashboardStats struct {
 	ActiveProjects   int    `json:"active_projects"`
 	PendingTasks     int    `json:"pending_tasks"`
@@ -8,10 +10,10 @@ type DashboardStats struct {
 }
 
 type TeamMember struct {
-	ID        int    `json:"id"`
-	Name      string `json:"name"`
-	AvatarURL string `json:"avatar_url"`
-	Position  string `json:"position"`
+	ID        uuid.UUID `json:"id"`
+	Name      string    `json:"name"`
+	AvatarURL string    `json:"avatar_url"`
+	Position  string    `json:"position"`
 }
 
 type HomeDashboardResponse struct {

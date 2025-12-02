@@ -1,11 +1,16 @@
 package models
 
-import "time"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 type Task struct {
-	ID             string    `json:"id"`
-	ProjectID      string    `json:"project_id"`
-	AssigneeID     string    `json:"assignee_id"`
+	ID             uuid.UUID `json:"id"`
+	TenantID       uuid.UUID `json:"tenant_id"`
+	ProjectID      uuid.UUID `json:"project_id"`
+	AssigneeID     uuid.UUID `json:"assignee_id"`
 	Title          string    `json:"title"`
 	Description    string    `json:"description"`
 	Completed      bool      `json:"completed"` // BARU - untuk toggle task
@@ -36,11 +41,11 @@ type TaskRequest struct {
 }
 
 type UpcomingTask struct {
-	ID       string `json:"id"`
-	Title    string `json:"title"`
-	DueDate  string `json:"due_date"`
-	Status   string `json:"status"`
-	Priority string `json:"priority"`
+	ID       uuid.UUID `json:"id"`
+	Title    string    `json:"title"`
+	DueDate  string    `json:"due_date"`
+	Status   string    `json:"status"`
+	Priority string    `json:"priority"`
 }
 
 type TaskStatistics struct {

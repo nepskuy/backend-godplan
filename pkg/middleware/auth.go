@@ -49,7 +49,8 @@ func GinAuthMiddleware() gin.HandlerFunc {
 		}
 
 		// Set userID in Gin context
-		c.Set("userID", int(claims.UserID))
+		c.Set("userID", claims.UserID)
+		c.Set("tenant_id", claims.TenantID.String())
 
 		// Token valid, continue to next handler
 		c.Next()

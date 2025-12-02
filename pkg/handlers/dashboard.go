@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/nepskuy/be-godplan/pkg/database"
 	"github.com/nepskuy/be-godplan/pkg/models"
 	"github.com/nepskuy/be-godplan/pkg/utils"
@@ -18,27 +19,49 @@ import (
 // @Router /home [get]
 // @Security BearerAuth
 func GetHomeDashboard(c *gin.Context) {
-	userID, exists := c.Get("userID")
+	userIDVal, exists := c.Get("userID")
 	if !exists {
 		utils.GinErrorResponse(c, 401, "Unauthorized")
 		return
 	}
 
+	tenantIDStr := c.GetString("tenant_id")
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		utils.GinErrorResponse(c, 401, "Invalid tenant ID")
+		return
+	}
+
+	var userID uuid.UUID
+	switch v := userIDVal.(type) {
+	case uuid.UUID:
+		userID = v
+	case string:
+		userID, err = uuid.Parse(v)
+		if err != nil {
+			utils.GinErrorResponse(c, 500, "Invalid user ID format")
+			return
+		}
+	default:
+		utils.GinErrorResponse(c, 500, "Invalid user ID type")
+		return
+	}
+
 	// Get user profile data
 	var userName, userAvatar string
-	err := database.DB.QueryRow(`
-		SELECT name, avatar_url FROM godplan.users WHERE id = $1
-	`, userID).Scan(&userName, &userAvatar)
+	err = database.DB.QueryRow(`
+		SELECT name, avatar_url FROM godplan.users WHERE id = $1 AND tenant_id = $2
+	`, userID, tenantID).Scan(&userName, &userAvatar)
 	if err != nil {
 		userName = "User"
 		userAvatar = "/avatars/default.jpg"
 	}
 
 	// Get dashboard stats
-	stats := getDashboardStats(userID.(int64))
+	stats := getDashboardStats(tenantID, userID)
 
 	// Get team members
-	teamMembers := getTeamMembers(userID.(int64))
+	teamMembers := getTeamMembers(tenantID, userID)
 
 	// Get greeting based on current time
 	greeting := getGreeting()
@@ -69,20 +92,29 @@ func GetDashboardStats(c *gin.Context) {
 		return
 	}
 
-	// Gin context stores userID as int (set in GinAuthMiddleware),
-	// but getDashboardStats expects int64. Safely convert.
-	var userID int64
-	switch v := userIDVal.(type) {
-	case int64:
-		userID = v
-	case int:
-		userID = int64(v)
-	default:
-		utils.GinErrorResponse(c, 500, "invalid user id type")
+	tenantIDStr := c.GetString("tenant_id")
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		utils.GinErrorResponse(c, 401, "Invalid tenant ID")
 		return
 	}
 
-	stats := getDashboardStats(userID)
+	var userID uuid.UUID
+	switch v := userIDVal.(type) {
+	case uuid.UUID:
+		userID = v
+	case string:
+		userID, err = uuid.Parse(v)
+		if err != nil {
+			utils.GinErrorResponse(c, 500, "Invalid user ID format")
+			return
+		}
+	default:
+		utils.GinErrorResponse(c, 500, "Invalid user ID type")
+		return
+	}
+
+	stats := getDashboardStats(tenantID, userID)
 	utils.GinSuccessResponse(c, 200, "Dashboard stats retrieved successfully", stats)
 }
 
@@ -95,30 +127,58 @@ func GetDashboardStats(c *gin.Context) {
 // @Router /teams [get]
 // @Security BearerAuth
 func GetTeamMembers(c *gin.Context) {
-	userID, exists := c.Get("userID")
+	userIDVal, exists := c.Get("userID")
 	if !exists {
 		utils.GinErrorResponse(c, 401, "Unauthorized")
 		return
 	}
 
-	teamMembers := getTeamMembers(userID.(int64))
+	tenantIDStr := c.GetString("tenant_id")
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		utils.GinErrorResponse(c, 401, "Invalid tenant ID")
+		return
+	}
+
+	var userID uuid.UUID
+	switch v := userIDVal.(type) {
+	case uuid.UUID:
+		userID = v
+	case string:
+		userID, err = uuid.Parse(v)
+		if err != nil {
+			utils.GinErrorResponse(c, 500, "Invalid user ID format")
+			return
+		}
+	default:
+		utils.GinErrorResponse(c, 500, "Invalid user ID type")
+		return
+	}
+
+	teamMembers := getTeamMembers(tenantID, userID)
 	utils.GinSuccessResponse(c, 200, "Team members retrieved successfully", teamMembers)
 }
 
 // Helper functions
-func getDashboardStats(userID int64) models.DashboardStats {
+func getDashboardStats(tenantID uuid.UUID, userID uuid.UUID) models.DashboardStats {
 	var stats models.DashboardStats
 
-	// NOTE: In the current schema, projects.manager_id and tasks.assignee_id
-	// both reference employees(id), which is linked to users(id) via employees.user_id.
-	// For now we treat userID as employees.id and count projects/tasks where the
-	// logged-in user is the manager/assignee.
+	// Cari employee_id berdasarkan user_id
+	var employeeID uuid.UUID
+	err := database.DB.QueryRow(`
+		SELECT id FROM godplan.employees WHERE user_id = $1 AND tenant_id = $2
+	`, userID, tenantID).Scan(&employeeID)
+
+	if err != nil {
+		// Jika tidak ada employee record, return empty stats
+		return stats
+	}
 
 	// Count active projects for this manager
-	err := database.DB.QueryRow(`
+	err = database.DB.QueryRow(`
 		SELECT COUNT(*) FROM godplan.projects 
-		WHERE status != 'completed' AND manager_id = $1
-	`, userID).Scan(&stats.ActiveProjects)
+		WHERE status != 'completed' AND manager_id = $1 AND tenant_id = $2
+	`, employeeID, tenantID).Scan(&stats.ActiveProjects)
 	if err != nil {
 		stats.ActiveProjects = 0
 	}
@@ -126,8 +186,8 @@ func getDashboardStats(userID int64) models.DashboardStats {
 	// Count pending tasks for this assignee (status != 'completed')
 	err = database.DB.QueryRow(`
 		SELECT COUNT(*) FROM godplan.tasks 
-		WHERE assignee_id = $1 AND status != 'completed'
-	`, userID).Scan(&stats.PendingTasks)
+		WHERE assignee_id = $1 AND status != 'completed' AND tenant_id = $2
+	`, employeeID, tenantID).Scan(&stats.PendingTasks)
 	if err != nil {
 		stats.PendingTasks = 0
 	}
@@ -135,9 +195,9 @@ func getDashboardStats(userID int64) models.DashboardStats {
 	// Check today's attendance (schema already matches user_id)
 	err = database.DB.QueryRow(`
 		SELECT CASE 
-			WHEN EXISTS (SELECT 1 FROM godplan.attendances WHERE user_id = $1 AND DATE(created_at) = CURRENT_DATE) 
+			WHEN EXISTS (SELECT 1 FROM godplan.attendances WHERE user_id = $1 AND tenant_id = $2 AND DATE(created_at) = CURRENT_DATE) 
 			THEN 'present' ELSE 'absent' END
-	`, userID).Scan(&stats.AttendanceStatus)
+	`, userID, tenantID).Scan(&stats.AttendanceStatus)
 	if err != nil {
 		stats.AttendanceStatus = "absent"
 	}
@@ -149,8 +209,8 @@ func getDashboardStats(userID int64) models.DashboardStats {
 			COUNT(*) as total,
 			COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed
 		FROM godplan.tasks 
-		WHERE assignee_id = $1
-	`, userID).Scan(&totalTasks, &completedTasks)
+		WHERE assignee_id = $1 AND tenant_id = $2
+	`, employeeID, tenantID).Scan(&totalTasks, &completedTasks)
 
 	if err != nil {
 		// Handle error jika query gagal
@@ -164,15 +224,15 @@ func getDashboardStats(userID int64) models.DashboardStats {
 	return stats
 }
 
-func getTeamMembers(userID int64) []models.TeamMember {
+func getTeamMembers(tenantID uuid.UUID, userID uuid.UUID) []models.TeamMember {
 	var members []models.TeamMember
 
 	rows, err := database.DB.Query(`
 		SELECT id, name, avatar_url, position 
 		FROM godplan.users 
-		WHERE id != $1 AND is_active = true
+		WHERE id != $1 AND tenant_id = $2 AND is_active = true
 		LIMIT 4
-	`, userID)
+	`, userID, tenantID)
 
 	if err != nil {
 		// Fallback data
@@ -199,25 +259,25 @@ func getTeamMembers(userID int64) []models.TeamMember {
 func getFallbackTeamMembers() []models.TeamMember {
 	return []models.TeamMember{
 		{
-			ID:        1,
+			ID:        uuid.New(),
 			Name:      "Rina",
 			AvatarURL: "/avatars/rina.jpg",
 			Position:  "Developer",
 		},
 		{
-			ID:        2,
+			ID:        uuid.New(),
 			Name:      "Budi",
 			AvatarURL: "/avatars/budi.jpg",
 			Position:  "Designer",
 		},
 		{
-			ID:        3,
+			ID:        uuid.New(),
 			Name:      "Sari",
 			AvatarURL: "/avatars/sari.jpg",
 			Position:  "Manager",
 		},
 		{
-			ID:        4,
+			ID:        uuid.New(),
 			Name:      "Andi",
 			AvatarURL: "/avatars/andi.jpg",
 			Position:  "Developer",
