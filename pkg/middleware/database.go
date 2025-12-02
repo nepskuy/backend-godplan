@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/nepskuy/be-godplan/pkg/config"
 	"github.com/nepskuy/be-godplan/pkg/database"
 )
 
@@ -21,7 +22,8 @@ func GinDatabaseCheck() gin.HandlerFunc {
 			log.Printf("❌ Database connection lost: %v", err)
 
 			// Try to reconnect
-			if reconnectErr := database.InitDB(); reconnectErr != nil {
+			cfg := config.Load()
+			if reconnectErr := database.InitDB(cfg); reconnectErr != nil {
 				log.Printf("❌ Failed to reconnect to database: %v", reconnectErr)
 				c.JSON(http.StatusServiceUnavailable, gin.H{
 					"error": "Database connection lost",

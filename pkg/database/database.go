@@ -12,8 +12,7 @@ import (
 
 var DB *sql.DB
 
-func InitDB() error {
-	cfg := config.Load()
+func InitDB(cfg *config.Config) error {
 	connStr := cfg.GetDBConnectionString()
 
 	if config.IsDevelopment() {

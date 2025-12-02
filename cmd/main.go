@@ -35,8 +35,8 @@ func main() {
 	}
 
 	// Initialize database
-	if err := database.InitDB(); err != nil {
-		log.Printf("❌ Database connection failed: %v", err)
+	if err := database.InitDB(cfg); err != nil {
+		log.Fatalf("❌ Database connection failed: %v", err)
 	} else {
 		log.Printf("✅ Database connected successfully")
 	}
