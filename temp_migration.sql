@@ -1,6 +1,6 @@
 -- Add approval tracking columns
 ALTER TABLE godplan.attendances 
-ADD COLUMN IF NOT EXISTS approved_by INTEGER REFERENCES godplan.users(id),
+ADD COLUMN IF NOT EXISTS approved_by UUID REFERENCES godplan.users(id),
 ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP,
 ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
 

@@ -6,8 +6,8 @@ ALTER TABLE godplan.projects
 ADD COLUMN IF NOT EXISTS crm_id UUID REFERENCES godplan.crm_projects(id),
 ADD COLUMN IF NOT EXISTS tenant_id UUID REFERENCES godplan.tenants(id),
 ADD COLUMN IF NOT EXISTS division_id UUID REFERENCES godplan.divisions(id),
-ADD COLUMN IF NOT EXISTS assigned_to BIGINT REFERENCES godplan.users(id),
-ADD COLUMN IF NOT EXISTS team_members BIGINT[],
+ADD COLUMN IF NOT EXISTS assigned_to UUID REFERENCES godplan.users(id),
+ADD COLUMN IF NOT EXISTS team_members TEXT[],
 ADD COLUMN IF NOT EXISTS current_phase_id UUID REFERENCES godplan.project_phases(id),
 ADD COLUMN IF NOT EXISTS progress INT DEFAULT 0 CHECK (progress >= 0 AND progress <= 100),
 ADD COLUMN IF NOT EXISTS expected_completion_date TIMESTAMP;

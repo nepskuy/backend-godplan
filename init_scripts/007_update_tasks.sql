@@ -15,7 +15,7 @@ ADD COLUMN IF NOT EXISTS actual_hours DECIMAL(10,2);
 CREATE INDEX IF NOT EXISTS idx_tasks_project ON godplan.tasks(project_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_phase ON godplan.tasks(phase_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_tenant ON godplan.tasks(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_tasks_assigned ON godplan.tasks(assigned_to);
+CREATE INDEX IF NOT EXISTS idx_tasks_assigned ON godplan.tasks(assignee_id);
 
 -- Assign existing tasks to default tenant
 UPDATE godplan.tasks
