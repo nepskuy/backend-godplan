@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -300,9 +301,8 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	if config.IsDevelopment() {
-		fmt.Printf("🔐 LOGIN ATTEMPT - Email: %s\n", credentials.Email)
-	}
+	// Force log for debugging
+	log.Printf("🔐 LOGIN ATTEMPT - Email: %s", credentials.Email)
 
 	// Gunakan context dengan timeout untuk query database
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
@@ -333,9 +333,7 @@ func Login(c *gin.Context) {
 	)
 
 	if err != nil {
-		if config.IsDevelopment() {
-			fmt.Printf("❌ User not found or DB error: %v\n", err)
-		}
+		log.Printf("❌ User not found or DB error: %v", err)
 		c.JSON(401, gin.H{
 			"success": false,
 			"error":   "Invalid credentials",
@@ -352,14 +350,12 @@ func Login(c *gin.Context) {
 	// Verify password
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(credentials.Password))
 	if err != nil {
-		if config.IsDevelopment() {
-			fmt.Printf("❌ PASSWORD MISMATCH: %v\n", err)
+		log.Printf("❌ PASSWORD MISMATCH for user %s: %v", user.Email, err)
 
-			// Test hash the input password to debug
-			testHash, hashErr := bcrypt.GenerateFromPassword([]byte(credentials.Password), bcrypt.DefaultCost)
-			if hashErr == nil {
-				fmt.Printf("🔐 DEBUG - New hash of input: %s\n", string(testHash))
-			}
+		// Test hash the input password to debug
+		testHash, hashErr := bcrypt.GenerateFromPassword([]byte(credentials.Password), bcrypt.DefaultCost)
+		if hashErr == nil {
+			log.Printf("🔐 DEBUG - New hash of input: %s", string(testHash))
 		}
 		c.JSON(401, gin.H{
 			"success": false,
