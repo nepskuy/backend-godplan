@@ -22,13 +22,18 @@ func GinCORS() gin.HandlerFunc {
 			"http://localhost:3001",
 		}
 
+		// Check if origin is allowed
 		allowed := false
 		for _, o := range allowedOrigins {
 			if origin == o {
-				c.Header("Access-Control-Allow-Origin", origin)
 				allowed = true
 				break
 			}
+		}
+
+		// Allow all Vercel deployments (preview & production)
+		if !allowed && strings.HasSuffix(origin, ".vercel.app") {
+			allowed = true
 		}
 
 		// Fallback for development/localhost if not in the allowed list
@@ -36,8 +41,12 @@ func GinCORS() gin.HandlerFunc {
 			if origin != "" && (strings.HasPrefix(origin, "http://localhost") ||
 				strings.HasPrefix(origin, "http://127.0.0.1") ||
 				strings.HasPrefix(origin, "https://localhost")) {
-				c.Header("Access-Control-Allow-Origin", origin)
+				allowed = true
 			}
+		}
+
+		if allowed {
+			c.Header("Access-Control-Allow-Origin", origin)
 		}
 
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
