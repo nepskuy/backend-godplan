@@ -11,8 +11,8 @@ import (
 
 func GinDatabaseCheck() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Skip database check for specific routes if needed
-		if c.Request.URL.Path == "/health" || c.Request.URL.Path == "/api/v1/health" {
+		// Skip database check for specific routes OR OPTIONS method
+		if c.Request.Method == "OPTIONS" || c.Request.URL.Path == "/health" || c.Request.URL.Path == "/api/v1/health" {
 			c.Next()
 			return
 		}

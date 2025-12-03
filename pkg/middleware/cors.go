@@ -13,22 +13,26 @@ func GinCORS() gin.HandlerFunc {
 		origin := c.Request.Header.Get("Origin")
 		env := os.Getenv("ENVIRONMENT")
 
-		// PRODUCTION: hanya allow domain resmi
-		if env == "production" {
-			allowedOrigins := []string{
-				"https://godplan.godjahstudio.com",
-				"https://be-godplan.godjahstudio.com",
-				"https://fe-godplan.vercel.app",
-			}
+		// Allow specific origins regardless of environment
+		allowedOrigins := []string{
+			"https://godplan.godjahstudio.com",
+			"https://be-godplan.godjahstudio.com",
+			"https://fe-godplan.vercel.app",
+			"http://localhost:3000",
+			"http://localhost:3001",
+		}
 
-			for _, o := range allowedOrigins {
-				if origin == o {
-					c.Header("Access-Control-Allow-Origin", origin)
-					break
-				}
+		allowed := false
+		for _, o := range allowedOrigins {
+			if origin == o {
+				c.Header("Access-Control-Allow-Origin", origin)
+				allowed = true
+				break
 			}
-		} else {
-			// DEVELOPMENT: allow semua origin localhost supaya bebas pakai port berapa saja
+		}
+
+		// Fallback for development/localhost if not in the allowed list
+		if !allowed && (env != "production") {
 			if origin != "" && (strings.HasPrefix(origin, "http://localhost") ||
 				strings.HasPrefix(origin, "http://127.0.0.1") ||
 				strings.HasPrefix(origin, "https://localhost")) {
