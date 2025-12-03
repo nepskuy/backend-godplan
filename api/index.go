@@ -12,6 +12,10 @@ import (
 	"github.com/nepskuy/be-godplan/pkg/handlers"
 	"github.com/nepskuy/be-godplan/pkg/middleware"
 	"github.com/nepskuy/be-godplan/pkg/repository"
+
+	// Swagger
+	docs "github.com/nepskuy/be-godplan/docs"
+	"github.com/swaggo/swag"
 )
 
 var router *gin.Engine
@@ -36,7 +40,7 @@ func init() {
 
 	// Initialize database
 	if err := database.InitDB(cfg); err != nil {
-		log.Fatalf("❌ Database connection failed: %v", err)
+		log.Printf("❌ Database connection failed: %v", err)
 	} else {
 		log.Printf("✅ Database connected successfully")
 	}
@@ -191,6 +195,13 @@ func ginSwaggerJSONHandler(c *gin.Context) {
 		// Fallback: coba baca dari path relative
 		data, err = os.ReadFile("docs/swagger.json")
 		if err != nil {
+			// Fallback: try generated docs
+			doc, err := swag.ReadDoc(docs.SwaggerInfo.InstanceName())
+			if err == nil {
+				c.Data(200, "application/json", []byte(doc))
+				return
+			}
+
 			log.Printf("❌ Failed to read swagger.json: %v", err)
 			// Fallback ke embedded swagger spec yang LENGKAP
 			embeddedSwagger := createEmbeddedSwaggerSpec()
