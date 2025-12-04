@@ -28,11 +28,13 @@ func InitDB(cfg *config.Config) error {
 		return err
 	}
 
-	// Set connection pool
-	DB.SetMaxOpenConns(25)
-	DB.SetMaxIdleConns(10)
-	DB.SetConnMaxLifetime(30 * time.Minute)
-	DB.SetConnMaxIdleTime(5 * time.Minute)
+	// Set connection pool - Serverless-friendly settings
+	// Aiven free tier has limited connections (usually 5-10 total)
+	// Each Vercel instance creates its own pool, so keep it small
+	DB.SetMaxOpenConns(2)           // Max 2 connections per instance
+	DB.SetMaxIdleConns(1)           // Keep 1 idle connection ready
+	DB.SetConnMaxLifetime(5 * time.Minute)   // Shorter lifetime for serverless
+	DB.SetConnMaxIdleTime(1 * time.Minute)   // Close idle connections faster
 
 	// Retry ping
 	maxRetries := 5
