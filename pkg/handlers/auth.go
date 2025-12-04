@@ -308,15 +308,15 @@ func Login(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
-	// Default Tenant ID
-	defaultTenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	// Default Tenant ID (only used for fallback or new registrations if needed, but for login we should trust the DB)
+	// defaultTenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 
 	var user models.User
 	err := database.DB.QueryRowContext(ctx,
 		`SELECT id, tenant_id, username, email, password, role, name, phone, 
 			avatar_url, is_active, created_at, updated_at
-		 FROM godplan.users WHERE email = $1 AND tenant_id = $2 AND is_active = true`,
-		credentials.Email, defaultTenantID,
+		 FROM godplan.users WHERE email = $1 AND is_active = true`,
+		credentials.Email,
 	).Scan(
 		&user.ID,
 		&user.TenantID,
