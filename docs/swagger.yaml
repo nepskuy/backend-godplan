@@ -38,6 +38,32 @@ definitions:
         example: 106.8456
         type: number
     type: object
+  models.CRMProjectRequest:
+    properties:
+      category:
+        type: string
+      client:
+        type: string
+      contact_person:
+        type: string
+      deadline:
+        type: string
+      description:
+        type: string
+      stage:
+        type: string
+      status:
+        type: string
+      title:
+        type: string
+      urgency:
+        type: string
+      value:
+        type: number
+    required:
+    - client
+    - title
+    type: object
   models.DashboardStats:
     properties:
       active_projects:
@@ -111,7 +137,7 @@ definitions:
       avatar_url:
         type: string
       id:
-        type: integer
+        type: string
       name:
         type: string
       position:
@@ -145,7 +171,7 @@ definitions:
       employment_type:
         type: string
       id:
-        type: integer
+        type: string
       is_active:
         type: boolean
       join_date:
@@ -159,6 +185,8 @@ definitions:
       role:
         type: string
       status:
+        type: string
+      tenant_id:
         type: string
       updated_at:
         type: string
@@ -200,6 +228,83 @@ definitions:
 info:
   contact: {}
 paths:
+  /api/v1/auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate user and return JWT token
+      parameters:
+      - description: Login credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      summary: User login
+      tags:
+      - auth
+  /api/v1/auth/register:
+    post:
+      consumes:
+      - application/json
+      - application/json
+      description: |-
+        Create a new user account with complete profile data
+        Create a new user account with complete profile data
+      parameters:
+      - description: User registration data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.UserRegistrationRequest'
+      - description: User registration data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.UserRegistrationRequest'
+      produces:
+      - application/json
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Register a new user
+      tags:
+      - auth
+      - auth
   /attendance:
     get:
       consumes:
@@ -338,72 +443,120 @@ paths:
       summary: Clock out attendance
       tags:
       - attendance
-  /auth/login:
-    post:
+  /crm/projects:
+    get:
       consumes:
       - application/json
-      description: Authenticate user and return JWT token
-      parameters:
-      - description: Login credentials
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/models.LoginRequest'
+      description: Get list of CRM projects (pipeline) for the current user as manager
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-      summary: User login
+            $ref: '#/definitions/utils.GinResponse'
+      security:
+      - BearerAuth: []
+      summary: Get CRM projects for current user
       tags:
-      - auth
-  /auth/register:
+      - crm
     post:
       consumes:
       - application/json
-      description: Create a new user account with complete profile data
+      description: Create a new CRM project (used by dashboard, PWA should remain
+        read-only)
       parameters:
-      - description: User registration data
+      - description: CRM project data
         in: body
         name: request
         required: true
         schema:
-          $ref: '#/definitions/models.UserRegistrationRequest'
+          $ref: '#/definitions/models.CRMProjectRequest'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Register a new user
+            $ref: '#/definitions/utils.GinResponse'
+      security:
+      - BearerAuth: []
+      summary: Create new CRM project
       tags:
-      - auth
+      - crm
+  /crm/projects/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a CRM project by ID
+      parameters:
+      - description: CRM Project ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.GinResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete CRM project
+      tags:
+      - crm
+    get:
+      consumes:
+      - application/json
+      description: Get a specific CRM project by ID
+      parameters:
+      - description: CRM Project ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.GinResponse'
+      security:
+      - BearerAuth: []
+      summary: Get CRM project by ID
+      tags:
+      - crm
+    put:
+      consumes:
+      - application/json
+      description: Update an existing CRM project
+      parameters:
+      - description: CRM Project ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: CRM project data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.CRMProjectRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.GinResponse'
+      security:
+      - BearerAuth: []
+      summary: Update CRM project
+      tags:
+      - crm
   /dashboard/stats:
     get:
       description: Get overview statistics for dashboard
@@ -713,8 +866,12 @@ paths:
     get:
       consumes:
       - application/json
-      description: Get list of all active users
+      - application/json
+      description: |-
+        Get list of all active users
+        Get list of all active users
       produces:
+      - application/json
       - application/json
       responses:
         "200":
@@ -727,8 +884,10 @@ paths:
             $ref: '#/definitions/utils.GinResponse'
       security:
       - BearerAuth: []
+      - BearerAuth: []
       summary: Get all users
       tags:
+      - users
       - users
     post:
       consumes:
@@ -771,7 +930,7 @@ paths:
         in: path
         name: id
         required: true
-        type: integer
+        type: string
       produces:
       - application/json
       responses:
