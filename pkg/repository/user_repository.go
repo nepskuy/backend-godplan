@@ -23,7 +23,7 @@ func NewUserRepository(db *sql.DB) *UserRepository {
 func (r *UserRepository) GetUserByID(tenantID uuid.UUID, id uuid.UUID) (*models.User, error) {
 	var user models.User
 	err := r.db.QueryRow(`
-		SELECT id, tenant_id, username, email, password, role, name, phone, avatar_url, is_active, created_at, updated_at
+		SELECT id, tenant_id, username, email, password, role, full_name, phone, avatar_url, is_active, created_at, updated_at
 		FROM godplan.users 
 		WHERE id = $1 AND tenant_id = $2 AND is_active = true
 	`, id, tenantID).Scan(
@@ -33,7 +33,7 @@ func (r *UserRepository) GetUserByID(tenantID uuid.UUID, id uuid.UUID) (*models.
 		&user.Email,
 		&user.Password,
 		&user.Role,
-		&user.Name,
+		&user.FullName,
 		&user.Phone,
 		&user.AvatarURL,
 		&user.IsActive,
@@ -77,7 +77,7 @@ func (r *UserRepository) GetUserWithEmployeeData(tenantID uuid.UUID, userID uuid
 	var joinDate sql.NullTime
 
 	err := r.db.QueryRow(query, userID, tenantID).Scan(
-		&user.ID, &user.TenantID, &user.Username, &user.Email, &user.Name, &user.Phone, &user.Role,
+		&user.ID, &user.TenantID, &user.Username, &user.Email, &user.FullName, &user.Phone, &user.Role,
 		&user.AvatarURL, &user.IsActive, &user.CreatedAt, &user.UpdatedAt,
 		&employeeID, &joinDate, &employmentType, &workSchedule,
 		&departmentName, &positionName, &status,
@@ -120,7 +120,7 @@ func (r *UserRepository) GetUserWithEmployeeData(tenantID uuid.UUID, userID uuid
 func (r *UserRepository) GetUserByEmail(tenantID uuid.UUID, email string) (*models.User, error) {
 	var user models.User
 	err := r.db.QueryRow(`
-		SELECT id, tenant_id, username, email, password, role, name, phone, avatar_url, is_active, created_at, updated_at
+		SELECT id, tenant_id, username, email, password, role, full_name, phone, avatar_url, is_active, created_at, updated_at
 		FROM godplan.users 
 		WHERE email = $1 AND tenant_id = $2 AND is_active = true
 	`, email, tenantID).Scan(
@@ -130,7 +130,7 @@ func (r *UserRepository) GetUserByEmail(tenantID uuid.UUID, email string) (*mode
 		&user.Email,
 		&user.Password,
 		&user.Role,
-		&user.Name,
+		&user.FullName,
 		&user.Phone,
 		&user.AvatarURL,
 		&user.IsActive,
@@ -152,7 +152,7 @@ func (r *UserRepository) GetUserByEmail(tenantID uuid.UUID, email string) (*mode
 func (r *UserRepository) GetUserByUsername(tenantID uuid.UUID, username string) (*models.User, error) {
 	var user models.User
 	err := r.db.QueryRow(`
-		SELECT id, tenant_id, username, email, password, role, name, phone, avatar_url, is_active, created_at, updated_at
+		SELECT id, tenant_id, username, email, password, role, full_name, phone, avatar_url, is_active, created_at, updated_at
 		FROM godplan.users 
 		WHERE username = $1 AND tenant_id = $2 AND is_active = true
 	`, username, tenantID).Scan(
@@ -162,7 +162,7 @@ func (r *UserRepository) GetUserByUsername(tenantID uuid.UUID, username string) 
 		&user.Email,
 		&user.Password,
 		&user.Role,
-		&user.Name,
+		&user.FullName,
 		&user.Phone,
 		&user.AvatarURL,
 		&user.IsActive,
@@ -185,7 +185,7 @@ func (r *UserRepository) CreateUser(user *models.User) error {
 	var id uuid.UUID
 	err := r.db.QueryRow(`
 		INSERT INTO godplan.users (
-			tenant_id, username, email, password, role, name, phone, avatar_url, is_active, created_at, updated_at
+			tenant_id, username, email, password, role, full_name, phone, avatar_url, is_active, created_at, updated_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		RETURNING id
 	`,
@@ -194,7 +194,7 @@ func (r *UserRepository) CreateUser(user *models.User) error {
 		user.Email,
 		user.Password,
 		user.Role,
-		user.Name,
+		user.FullName,
 		user.Phone,
 		user.AvatarURL,
 		user.IsActive,
@@ -224,7 +224,7 @@ func (r *UserRepository) UpdateUser(user *models.User) error {
 		user.Username,
 		user.Email,
 		user.Role,
-		user.Name,
+		user.FullName,
 		user.Phone,
 		user.AvatarURL,
 		user.IsActive,
@@ -264,7 +264,7 @@ func (r *UserRepository) DeleteUser(tenantID uuid.UUID, id uuid.UUID) error {
 // GetAllUsers mendapatkan semua user aktif
 func (r *UserRepository) GetAllUsers(tenantID uuid.UUID) ([]models.User, error) {
 	rows, err := r.db.Query(`
-		SELECT id, tenant_id, username, email, role, name, phone, avatar_url, is_active, created_at, updated_at
+		SELECT id, tenant_id, username, email, role, full_name, phone, avatar_url, is_active, created_at, updated_at
 		FROM godplan.users 
 		WHERE is_active = true AND tenant_id = $1
 		ORDER BY created_at DESC
@@ -286,7 +286,7 @@ func (r *UserRepository) GetAllUsers(tenantID uuid.UUID) ([]models.User, error) 
 			&user.Username,
 			&user.Email,
 			&user.Role,
-			&user.Name,
+			&user.FullName,
 			&user.Phone,
 			&user.AvatarURL,
 			&user.IsActive,

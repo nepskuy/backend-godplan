@@ -1416,6 +1416,10 @@ const docTemplate = `{
                 "employment_type": {
                     "type": "string"
                 },
+                "full_name": {
+                    "description": "Changed from Name to FullName",
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },
@@ -1423,9 +1427,6 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "join_date": {
-                    "type": "string"
-                },
-                "name": {
                     "type": "string"
                 },
                 "phone": {
@@ -1458,7 +1459,7 @@ const docTemplate = `{
             "type": "object",
             "required": [
                 "email",
-                "name",
+                "full_name",
                 "password",
                 "username"
             ],
@@ -1466,7 +1467,8 @@ const docTemplate = `{
                 "email": {
                     "type": "string"
                 },
-                "name": {
+                "full_name": {
+                    "description": "Changed from Name to FullName",
                     "type": "string"
                 },
                 "password": {

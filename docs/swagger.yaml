@@ -170,13 +170,14 @@ definitions:
         type: string
       employment_type:
         type: string
+      full_name:
+        description: Changed from Name to FullName
+        type: string
       id:
         type: string
       is_active:
         type: boolean
       join_date:
-        type: string
-      name:
         type: string
       phone:
         type: string
@@ -199,7 +200,8 @@ definitions:
     properties:
       email:
         type: string
-      name:
+      full_name:
+        description: Changed from Name to FullName
         type: string
       password:
         type: string
@@ -211,7 +213,7 @@ definitions:
         type: string
     required:
     - email
-    - name
+    - full_name
     - password
     - username
     type: object

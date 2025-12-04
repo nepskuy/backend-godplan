@@ -52,7 +52,7 @@ func GetUsers(c *gin.Context) {
 	}
 
 	rows, err := database.DB.Query(`
-		SELECT id, tenant_id, username, email, role, name, phone, avatar_url, is_active, created_at, updated_at 
+		SELECT id, tenant_id, username, email, role, full_name, phone, avatar_url, is_active, created_at, updated_at 
 		FROM godplan.users 
 		WHERE is_active = true AND tenant_id = $1
 	`, tenantID)
@@ -74,7 +74,7 @@ func GetUsers(c *gin.Context) {
 			&user.Username,
 			&user.Email,
 			&user.Role,
-			&user.Name,
+			&user.FullName,
 			&user.Phone,
 			&user.AvatarURL,
 			&user.IsActive,
@@ -142,8 +142,8 @@ func CreateUser(c *gin.Context) {
 	if user.Role == "" {
 		user.Role = "employee"
 	}
-	if user.Name == "" {
-		user.Name = user.Username
+	if user.FullName == "" {
+		user.FullName = user.Username
 	}
 	user.TenantID = tenantID
 
@@ -160,14 +160,14 @@ func CreateUser(c *gin.Context) {
 	var id uuid.UUID
 	err = database.DB.QueryRow(
 		`INSERT INTO godplan.users (
-			tenant_id, username, email, password, role, name, phone, avatar_url, is_active, created_at, updated_at
+			tenant_id, username, email, password, role, full_name, phone, avatar_url, is_active, created_at, updated_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
 		user.TenantID,
 		user.Username,
 		user.Email,
 		string(hashedPassword),
 		user.Role,
-		user.Name,
+		user.FullName,
 		user.Phone,
 		user.AvatarURL,
 		true, // is_active
@@ -186,7 +186,7 @@ func CreateUser(c *gin.Context) {
 	// Get the created user to return complete data
 	var createdUser models.User
 	err = database.DB.QueryRow(
-		`SELECT id, tenant_id, username, email, role, name, phone, avatar_url, is_active, created_at, updated_at 
+		`SELECT id, tenant_id, username, email, role, full_name, phone, avatar_url, is_active, created_at, updated_at 
 		 FROM godplan.users WHERE id = $1`,
 		id,
 	).Scan(
@@ -195,7 +195,7 @@ func CreateUser(c *gin.Context) {
 		&createdUser.Username,
 		&createdUser.Email,
 		&createdUser.Role,
-		&createdUser.Name,
+		&createdUser.FullName,
 		&createdUser.Phone,
 		&createdUser.AvatarURL,
 		&createdUser.IsActive,
@@ -257,7 +257,7 @@ func GetUser(c *gin.Context) {
 
 	var user models.User
 	err = database.DB.QueryRow(
-		`SELECT id, tenant_id, username, email, role, name, phone, avatar_url, is_active, created_at, updated_at 
+		`SELECT id, tenant_id, username, email, role, full_name, phone, avatar_url, is_active, created_at, updated_at 
 		 FROM godplan.users WHERE id = $1 AND tenant_id = $2 AND is_active = true`,
 		id, tenantID,
 	).Scan(
@@ -266,7 +266,7 @@ func GetUser(c *gin.Context) {
 		&user.Username,
 		&user.Email,
 		&user.Role,
-		&user.Name,
+		&user.FullName,
 		&user.Phone,
 		&user.AvatarURL,
 		&user.IsActive,

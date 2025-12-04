@@ -1405,6 +1405,10 @@
                 "employment_type": {
                     "type": "string"
                 },
+                "full_name": {
+                    "description": "Changed from Name to FullName",
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },
@@ -1412,9 +1416,6 @@
                     "type": "boolean"
                 },
                 "join_date": {
-                    "type": "string"
-                },
-                "name": {
                     "type": "string"
                 },
                 "phone": {
@@ -1447,7 +1448,7 @@
             "type": "object",
             "required": [
                 "email",
-                "name",
+                "full_name",
                 "password",
                 "username"
             ],
@@ -1455,7 +1456,8 @@
                 "email": {
                     "type": "string"
                 },
-                "name": {
+                "full_name": {
+                    "description": "Changed from Name to FullName",
                     "type": "string"
                 },
                 "password": {
