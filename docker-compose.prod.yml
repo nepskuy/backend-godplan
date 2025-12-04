@@ -5,7 +5,7 @@
       build: .
       container_name: godplan-api
       env_file:
-        - .env.production
+        - .env.prod
       ports:
         - "8080:8080"
       volumes:
