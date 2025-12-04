@@ -46,7 +46,7 @@ func Load() *Config {
 		DBSSLRootCert: getEnv("DB_SSLROOTCERT", ""),
 		ServerPort:    getEnv("PORT", "8080"),
 		JWTSecret:     getEnv("JWT_SECRET", "dev-secret-key-change-in-production"),
-		DatabaseURL:   getEnv("DATABASE_URL", getEnv("POSTGRES_URL", getEnv("POSTGRES_PRISMA_URL", getEnv("POSTGRES_URL_NON_POOLING", "")))),
+		DatabaseURL:   getEnv("DB_URL", getEnv("DATABASE_URL", getEnv("POSTGRES_URL", getEnv("POSTGRES_PRISMA_URL", getEnv("POSTGRES_URL_NON_POOLING", ""))))),
 		Env:           getEnv("ENV", "development"),
 
 		// 🔥 NEW: Office Location Config
