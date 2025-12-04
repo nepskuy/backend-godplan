@@ -13,7 +13,7 @@ type User struct {
 	Username  string    `json:"username" db:"username"`
 	Email     string    `json:"email" db:"email"`
 	Password  string    `json:"-" db:"password"`
-	Name      string    `json:"name,omitempty" db:"name"`
+	FullName  string    `json:"full_name" db:"full_name"` // Changed from Name to FullName
 	Role      string    `json:"role,omitempty" db:"role"`
 	Phone     string    `json:"phone,omitempty" db:"phone"`
 	AvatarURL string    `json:"avatar_url,omitempty" db:"avatar_url"`
@@ -35,7 +35,7 @@ type UserRegistrationRequest struct {
 	Username string `json:"username" binding:"required"`
 	Email    string `json:"email" binding:"required"`
 	Password string `json:"password" binding:"required"`
-	Name     string `json:"name" binding:"required"`
+	FullName string `json:"full_name" binding:"required"` // Changed from Name to FullName
 	Phone    string `json:"phone,omitempty"`
 	Role     string `json:"role,omitempty"`
 }

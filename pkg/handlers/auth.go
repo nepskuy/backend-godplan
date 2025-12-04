@@ -64,10 +64,10 @@ func Register(c *gin.Context) {
 	}
 
 	// Required fields validation
-	if req.Username == "" || req.Name == "" || req.Email == "" || req.Password == "" {
+	if req.Username == "" || req.FullName == "" || req.Email == "" || req.Password == "" {
 		c.JSON(400, gin.H{
 			"success": false,
-			"error":   "Required fields: username, name, email, password",
+			"error":   "Required fields: username, full_name, email, password",
 		})
 		return
 	}
@@ -90,8 +90,8 @@ func Register(c *gin.Context) {
 
 	// DEBUG: Print received data
 	if config.IsDevelopment() {
-		fmt.Printf("📥 REGISTER ATTEMPT - Username: %s, Email: %s, Name: %s, Role: %s\n",
-			req.Username, req.Email, req.Name, req.Role)
+		fmt.Printf("📥 REGISTER ATTEMPT - Username: %s, Email: %s, FullName: %s, Role: %s\n",
+			req.Username, req.Email, req.FullName, req.Role)
 	}
 
 	// Hash password
@@ -122,7 +122,7 @@ func Register(c *gin.Context) {
 	var userID uuid.UUID
 	err = database.DB.QueryRowContext(ctx,
 		`INSERT INTO godplan.users 
-			(tenant_id, username, email, password, role, name, phone, avatar_url, is_active, created_at, updated_at) 
+			(tenant_id, username, email, password, role, full_name, phone, avatar_url, is_active, created_at, updated_at) 
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) 
 		 RETURNING id`,
 		defaultTenantID,
@@ -130,7 +130,7 @@ func Register(c *gin.Context) {
 		req.Email,
 		string(hashedPassword),
 		req.Role,
-		req.Name,
+		req.FullName,
 		req.Phone,
 		"",   // avatar_url kosong
 		true, // is_active
@@ -202,7 +202,7 @@ func Register(c *gin.Context) {
 	// Get the created user to return complete data
 	var createdUser models.User
 	err = database.DB.QueryRowContext(ctx,
-		`SELECT id, tenant_id, username, email, role, name, phone, avatar_url, is_active, created_at, updated_at 
+		`SELECT id, tenant_id, username, email, role, full_name, phone, avatar_url, is_active, created_at, updated_at 
 		 FROM godplan.users WHERE id = $1`,
 		userID,
 	).Scan(
@@ -211,7 +211,7 @@ func Register(c *gin.Context) {
 		&createdUser.Username,
 		&createdUser.Email,
 		&createdUser.Role,
-		&createdUser.Name,
+		&createdUser.FullName,
 		&createdUser.Phone,
 		&createdUser.AvatarURL,
 		&createdUser.IsActive,
@@ -313,7 +313,7 @@ func Login(c *gin.Context) {
 
 	var user models.User
 	err := database.DB.QueryRowContext(ctx,
-		`SELECT id, tenant_id, username, email, password, role, name, phone, 
+		`SELECT id, tenant_id, username, email, password, role, full_name, phone, 
 			avatar_url, is_active, created_at, updated_at
 		 FROM godplan.users WHERE email = $1 AND is_active = true`,
 		credentials.Email,
@@ -324,7 +324,7 @@ func Login(c *gin.Context) {
 		&user.Email,
 		&user.Password,
 		&user.Role,
-		&user.Name,
+		&user.FullName,
 		&user.Phone,
 		&user.AvatarURL,
 		&user.IsActive,
