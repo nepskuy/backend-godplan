@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"strings"
@@ -201,6 +202,7 @@ func Register(c *gin.Context) {
 
 	// Get the created user to return complete data
 	var createdUser models.User
+	var phone, avatarURL sql.NullString
 	err = database.DB.QueryRowContext(ctx,
 		`SELECT id, tenant_id, username, email, role, full_name, phone, avatar_url, is_active, created_at, updated_at 
 		 FROM godplan.users WHERE id = $1`,
@@ -212,12 +214,15 @@ func Register(c *gin.Context) {
 		&createdUser.Email,
 		&createdUser.Role,
 		&createdUser.FullName,
-		&createdUser.Phone,
-		&createdUser.AvatarURL,
+		&phone,
+		&avatarURL,
 		&createdUser.IsActive,
 		&createdUser.CreatedAt,
 		&createdUser.UpdatedAt,
 	)
+	
+	createdUser.Phone = phone.String
+	createdUser.AvatarURL = avatarURL.String
 
 	if err != nil {
 		if config.IsDevelopment() {
@@ -308,6 +313,7 @@ func Login(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
+	var phone, avatarURL sql.NullString
 	var user models.User
 	err := database.DB.QueryRowContext(ctx,
 		`SELECT id, tenant_id, username, email, password, role, full_name, phone, 
@@ -322,12 +328,15 @@ func Login(c *gin.Context) {
 		&user.Password,
 		&user.Role,
 		&user.FullName,
-		&user.Phone,
-		&user.AvatarURL,
+		&phone,
+		&avatarURL,
 		&user.IsActive,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
+	
+	user.Phone = phone.String
+	user.AvatarURL = avatarURL.String
 
 	if err != nil {
 		log.Printf("❌ LOGIN ERROR: User not found or DB error: %v", err)
