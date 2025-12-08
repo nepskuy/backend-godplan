@@ -301,15 +301,12 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	// Force log for debugging
+	// Force log for debugging (ALWAYS LOG IN PRODUCTION FOR NOW)
 	log.Printf("🔐 LOGIN ATTEMPT - Email: %s", credentials.Email)
 
-	// Gunakan context dengan timeout untuk query database
+	// Use context with timeout
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
-
-	// Default Tenant ID (only used for fallback or new registrations if needed, but for login we should trust the DB)
-	// defaultTenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 
 	var user models.User
 	err := database.DB.QueryRowContext(ctx,
@@ -333,33 +330,24 @@ func Login(c *gin.Context) {
 	)
 
 	if err != nil {
-		log.Printf("❌ User not found or DB error: %v", err)
+		log.Printf("❌ LOGIN ERROR: User not found or DB error: %v", err)
 		c.JSON(401, gin.H{
 			"success": false,
-			"error":   "Invalid credentials",
+			"error":   fmt.Sprintf("User not found or DB error: %v", err), // Expose error temporarily
 		})
 		return
 	}
 
-	if config.IsDevelopment() {
-		fmt.Printf("✅ User found - ID: %s, Email: %s, Role: %s\n", user.ID, user.Email, user.Role)
-		fmt.Printf("🔐 PASSWORD DEBUG - Stored hash: %s\n", user.Password)
-		fmt.Printf("🔐 PASSWORD DEBUG - Input password: %s\n", credentials.Password)
-	}
+	// ALWAYS Log found user info
+	log.Printf("✅ User found in DB - ID: %s, Email: %s, Stored Hash: %s...", user.ID, user.Email, user.Password[:10])
 
 	// Verify password
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(credentials.Password))
 	if err != nil {
 		log.Printf("❌ PASSWORD MISMATCH for user %s: %v", user.Email, err)
-
-		// Test hash the input password to debug
-		testHash, hashErr := bcrypt.GenerateFromPassword([]byte(credentials.Password), bcrypt.DefaultCost)
-		if hashErr == nil {
-			log.Printf("🔐 DEBUG - New hash of input: %s", string(testHash))
-		}
 		c.JSON(401, gin.H{
 			"success": false,
-			"error":   "Invalid credentials",
+			"error":   "Password mismatch (Hash check failed)", // Specific error
 		})
 		return
 	}
