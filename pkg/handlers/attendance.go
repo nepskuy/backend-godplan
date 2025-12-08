@@ -135,9 +135,6 @@ func ClockIn(c *gin.Context) {
 
 	userIDVal, exists := c.Get("userID")
 	if !exists {
-		if config.IsDevelopment() {
-			fmt.Println("🔴 ClockIn: userID not found in context")
-		}
 		utils.GinErrorResponse(c, http.StatusUnauthorized, "User not authenticated")
 		return
 	}
@@ -164,66 +161,69 @@ func ClockIn(c *gin.Context) {
 		return
 	}
 
-	if config.IsDevelopment() {
-		fmt.Printf("🔵 ClockIn: userID=%s\n", userID)
-	}
-
-	// 🔥 NEW: Validasi lokasi
+	// Validate location
 	inRange, distance := utils.IsWithinOfficeRange(req.Latitude, req.Longitude)
 	cfg := config.Load()
 
-	// Jika tidak dalam range dan tidak menggunakan force, tolak attendance
 	if !inRange && !req.Force {
-		if config.IsDevelopment() {
-			fmt.Printf("🔴 ClockIn: Location out of range (%.0fm > %.0fm)\n", distance, cfg.AttendanceRadiusMeters)
-		}
 		utils.GinErrorResponse(c, http.StatusBadRequest,
-			fmt.Sprintf("Lokasi di luar jangkauan kantor (%.0f meter dari radius %0.f meter). Gunakan force=true untuk tetap melanjutkan.",
+			fmt.Sprintf("Lokasi di luar jangkauan kantor (%.0f meter dari radius %.0f meter). Gunakan force=true untuk tetap melanjutkan.",
 				distance, cfg.AttendanceRadiusMeters))
 		return
 	}
 
-	// Tentukan status berdasarkan lokasi dan force
-	status := "approved" // Default untuk dalam radius
+	// Determine status
+	status := "approved"
 	if !inRange && req.Force {
-		status = "pending_forced" // CHANGED: Perlu approval dari supervisor
-		if config.IsDevelopment() {
-			fmt.Printf("🟡 ClockIn: Forced attendance, needs approval (%.0fm > %.0fm)\n", distance, cfg.AttendanceRadiusMeters)
-		}
-	} else if !inRange {
-		// Seharusnya tidak sampai sini karena sudah di-reject di atas
-		status = "rejected"
+		status = "pending_forced"
 	}
 
+	// Check if already clocked in today
+	var existingID uuid.UUID
+	checkErr := database.DB.QueryRow(
+		`SELECT id FROM godplan.attendances 
+		 WHERE user_id = $1 AND tenant_id = $2 AND attendance_date = CURRENT_DATE`,
+		userID, tenantID,
+	).Scan(&existingID)
+
+	if checkErr == nil {
+		utils.GinErrorResponse(c, http.StatusBadRequest, "Sudah melakukan Clock In hari ini")
+		return
+	}
+
+	// Insert new attendance record with correct schema columns
 	var attendanceID uuid.UUID
+	now := time.Now()
 	err = database.DB.QueryRow(
-		"INSERT INTO attendances (tenant_id, user_id, type, status, latitude, longitude, photo_selfie, in_range, force_attendance, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id",
-		tenantID, userID, "in", status, req.Latitude, req.Longitude, req.PhotoSelfie, inRange, req.Force, time.Now(),
+		`INSERT INTO godplan.attendances (
+			tenant_id, user_id, type, status, 
+			check_in_time, check_in_lat, check_in_lng, check_in_photo,
+			attendance_date, in_range, force_attendance, created_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_DATE, $9, $10, $11) RETURNING id`,
+		tenantID, userID, "CheckIn", status,
+		now, req.Latitude, req.Longitude, req.PhotoSelfie,
+		inRange, req.Force, now,
 	).Scan(&attendanceID)
 
 	if err != nil {
 		if config.IsDevelopment() {
 			fmt.Printf("🔴 ClockIn database error: %v\n", err)
 		}
-		utils.GinErrorResponse(c, http.StatusInternalServerError, "Failed to clock in")
+		utils.GinErrorResponse(c, http.StatusInternalServerError, "Failed to clock in: "+err.Error())
 		return
-	}
-
-	if config.IsDevelopment() {
-		fmt.Printf("🔵 ClockIn successful: attendanceID=%s, status=%s, inRange=%t\n", attendanceID, status, inRange)
 	}
 
 	response := AttendanceResponse{
 		ID:              attendanceID,
 		UserID:          userID,
-		Type:            "in",
+		Type:            "CheckIn",
 		Status:          status,
 		Latitude:        req.Latitude,
 		Longitude:       req.Longitude,
 		PhotoSelfie:     req.PhotoSelfie,
 		InRange:         inRange,
 		ForceAttendance: req.Force,
-		CreatedAt:       time.Now(),
+		CreatedAt:       now,
 		Distance:        distance,
 		MaxRadius:       cfg.AttendanceRadiusMeters,
 	}
@@ -260,18 +260,12 @@ func ClockOut(c *gin.Context) {
 
 	var req ClockOutRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		if config.IsDevelopment() {
-			fmt.Printf("🔴 ClockOut bind error: %v\n", err)
-		}
 		utils.GinErrorResponse(c, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
 	userIDVal, exists := c.Get("userID")
 	if !exists {
-		if config.IsDevelopment() {
-			fmt.Println("🔴 ClockOut: userID not found in context")
-		}
 		utils.GinErrorResponse(c, http.StatusUnauthorized, "User not authenticated")
 		return
 	}
@@ -298,66 +292,76 @@ func ClockOut(c *gin.Context) {
 		return
 	}
 
-	if config.IsDevelopment() {
-		fmt.Printf("🔵 ClockOut: userID=%s\n", userID)
-	}
-
-	// 🔥 NEW: Validasi lokasi
+	// Validate location
 	inRange, distance := utils.IsWithinOfficeRange(req.Latitude, req.Longitude)
 	cfg := config.Load()
 
-	// Jika tidak dalam range dan tidak menggunakan force, tolak attendance
 	if !inRange && !req.Force {
-		if config.IsDevelopment() {
-			fmt.Printf("🔴 ClockOut: Location out of range (%.0fm > %.0fm)\n", distance, cfg.AttendanceRadiusMeters)
-		}
 		utils.GinErrorResponse(c, http.StatusBadRequest,
-			fmt.Sprintf("Lokasi di luar jangkauan kantor (%.0f meter dari radius %0.f meter). Gunakan force=true untuk tetap melanjutkan.",
+			fmt.Sprintf("Lokasi di luar jangkauan kantor (%.0f meter dari radius %.0f meter). Gunakan force=true untuk tetap melanjutkan.",
 				distance, cfg.AttendanceRadiusMeters))
 		return
 	}
 
-	// Tentukan status berdasarkan lokasi dan force
-	status := "approved" // Default untuk dalam radius
-	if !inRange && req.Force {
-		status = "pending_forced" // CHANGED: Perlu approval dari supervisor
-		if config.IsDevelopment() {
-			fmt.Printf("🟡 ClockOut: Forced attendance, needs approval (%.0fm > %.0fm)\n", distance, cfg.AttendanceRadiusMeters)
-		}
-	} else if !inRange {
-		// Seharusnya tidak sampai sini karena sudah di-reject di atas
-		status = "rejected"
+	// Find existing clock-in record for today
+	var attendanceID uuid.UUID
+	var checkInTime time.Time
+	findErr := database.DB.QueryRow(
+		`SELECT id, check_in_time FROM godplan.attendances 
+		 WHERE user_id = $1 AND tenant_id = $2 AND attendance_date = CURRENT_DATE AND check_out_time IS NULL`,
+		userID, tenantID,
+	).Scan(&attendanceID, &checkInTime)
+
+	if findErr != nil {
+		utils.GinErrorResponse(c, http.StatusBadRequest, "Belum melakukan Clock In hari ini atau sudah Clock Out")
+		return
 	}
 
-	var attendanceID uuid.UUID
-	err = database.DB.QueryRow(
-		"INSERT INTO attendances (tenant_id, user_id, type, status, latitude, longitude, photo_selfie, in_range, force_attendance, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id",
-		tenantID, userID, "out", status, req.Latitude, req.Longitude, req.PhotoSelfie, inRange, req.Force, time.Now(),
-	).Scan(&attendanceID)
+	// Calculate total hours
+	now := time.Now()
+	totalHours := now.Sub(checkInTime).Hours()
+
+	// Update status if force is used
+	status := "approved"
+	if !inRange && req.Force {
+		status = "pending_forced"
+	}
+
+	// Update existing record with checkout data
+	_, err = database.DB.Exec(
+		`UPDATE godplan.attendances SET
+			check_out_time = $1,
+			check_out_lat = $2,
+			check_out_lng = $3,
+			check_out_photo = $4,
+			total_hours = $5,
+			type = 'CheckOut',
+			status = $6,
+			updated_at = $7
+		WHERE id = $8 AND tenant_id = $9`,
+		now, req.Latitude, req.Longitude, req.PhotoSelfie,
+		totalHours, status, now, attendanceID, tenantID,
+	)
 
 	if err != nil {
 		if config.IsDevelopment() {
 			fmt.Printf("🔴 ClockOut database error: %v\n", err)
 		}
-		utils.GinErrorResponse(c, http.StatusInternalServerError, "Failed to clock out")
+		utils.GinErrorResponse(c, http.StatusInternalServerError, "Failed to clock out: "+err.Error())
 		return
-	}
-
-	if config.IsDevelopment() {
-		fmt.Printf("🔵 ClockOut successful: attendanceID=%s, status=%s, inRange=%t\n", attendanceID, status, inRange)
 	}
 
 	response := AttendanceResponse{
 		ID:              attendanceID,
 		UserID:          userID,
-		Type:            "out",
+		Type:            "CheckOut",
 		Status:          status,
 		Latitude:        req.Latitude,
 		Longitude:       req.Longitude,
 		PhotoSelfie:     req.PhotoSelfie,
 		InRange:         inRange,
 		ForceAttendance: req.Force,
-		CreatedAt:       time.Now(),
+		CreatedAt:       now,
 		Distance:        distance,
 		MaxRadius:       cfg.AttendanceRadiusMeters,
 	}

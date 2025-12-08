@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -306,9 +305,6 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	// Force log for debugging (ALWAYS LOG IN PRODUCTION FOR NOW)
-	log.Printf("🔐 LOGIN ATTEMPT - Email: %s", credentials.Email)
-
 	// Use context with timeout
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
@@ -339,24 +335,19 @@ func Login(c *gin.Context) {
 	user.AvatarURL = avatarURL.String
 
 	if err != nil {
-		log.Printf("❌ LOGIN ERROR: User not found or DB error: %v", err)
 		c.JSON(401, gin.H{
 			"success": false,
-			"error":   fmt.Sprintf("User not found or DB error: %v", err), // Expose error temporarily
+			"error":   "Invalid credentials",
 		})
 		return
 	}
 
-	// ALWAYS Log found user info
-	log.Printf("✅ User found in DB - ID: %s, Email: %s, Stored Hash: %s...", user.ID, user.Email, user.Password[:10])
-
 	// Verify password
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(credentials.Password))
 	if err != nil {
-		log.Printf("❌ PASSWORD MISMATCH for user %s: %v", user.Email, err)
 		c.JSON(401, gin.H{
 			"success": false,
-			"error":   "Password mismatch (Hash check failed)", // Specific error
+			"error":   "Invalid credentials",
 		})
 		return
 	}
