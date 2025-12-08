@@ -130,6 +130,10 @@ func setupGin() {
 			protected.POST("/attendance/clock-out", handlers.ClockOut)
 			protected.POST("/attendance/check-location", handlers.CheckLocation)
 			protected.GET("/attendance", handlers.GetAttendance)
+
+			// Project routes
+			protected.GET("/projects", handlers.GetProjects)
+			protected.GET("/projects/:id", handlers.GetProject)
 		}
 	}
 

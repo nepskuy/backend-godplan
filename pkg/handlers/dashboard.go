@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -163,7 +164,7 @@ func GetTeamMembers(c *gin.Context) {
 func getDashboardStats(tenantID uuid.UUID, userID uuid.UUID) models.DashboardStats {
 	var stats models.DashboardStats
 
-	// Cari employee_id berdasarkan user_id
+	// Cari employee_id berdasarkan user_id (this must be done first)
 	var employeeID uuid.UUID
 	err := database.DB.QueryRow(`
 		SELECT id FROM godplan.employees WHERE user_id = $1 AND tenant_id = $2
@@ -174,52 +175,88 @@ func getDashboardStats(tenantID uuid.UUID, userID uuid.UUID) models.DashboardSta
 		return stats
 	}
 
-	// Count active projects for this manager
-	err = database.DB.QueryRow(`
-		SELECT COUNT(*) FROM godplan.projects 
-		WHERE status != 'completed' AND manager_id = $1 AND tenant_id = $2
-	`, employeeID, tenantID).Scan(&stats.ActiveProjects)
-	if err != nil {
-		stats.ActiveProjects = 0
-	}
+	// Execute remaining queries in parallel
+	var wg sync.WaitGroup
+	var mu sync.Mutex
 
-	// Count pending tasks for this assignee (status != 'completed')
-	err = database.DB.QueryRow(`
-		SELECT COUNT(*) FROM godplan.tasks 
-		WHERE assignee_id = $1 AND status != 'completed' AND tenant_id = $2
-	`, employeeID, tenantID).Scan(&stats.PendingTasks)
-	if err != nil {
-		stats.PendingTasks = 0
-	}
+	wg.Add(4)
 
-	// Check today's attendance (schema already matches user_id)
-	err = database.DB.QueryRow(`
-		SELECT CASE 
-			WHEN EXISTS (SELECT 1 FROM godplan.attendances WHERE user_id = $1 AND tenant_id = $2 AND DATE(created_at) = CURRENT_DATE) 
-			THEN 'present' ELSE 'absent' END
-	`, userID, tenantID).Scan(&stats.AttendanceStatus)
-	if err != nil {
-		stats.AttendanceStatus = "absent"
-	}
+	// 1. Count active projects for this manager
+	go func() {
+		defer wg.Done()
+		var activeProjects int
+		err := database.DB.QueryRow(`
+			SELECT COUNT(*) FROM godplan.projects 
+			WHERE status != 'completed' AND manager_id = $1 AND tenant_id = $2
+		`, employeeID, tenantID).Scan(&activeProjects)
+		if err != nil {
+			activeProjects = 0
+		}
+		mu.Lock()
+		stats.ActiveProjects = activeProjects
+		mu.Unlock()
+	}()
 
-	// Calculate completion rate based on tasks status
-	var totalTasks, completedTasks int
-	err = database.DB.QueryRow(`
-		SELECT 
-			COUNT(*) as total,
-			COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed
-		FROM godplan.tasks 
-		WHERE assignee_id = $1 AND tenant_id = $2
-	`, employeeID, tenantID).Scan(&totalTasks, &completedTasks)
+	// 2. Count pending tasks for this assignee
+	go func() {
+		defer wg.Done()
+		var pendingTasks int
+		err := database.DB.QueryRow(`
+			SELECT COUNT(*) FROM godplan.tasks 
+			WHERE assignee_id = $1 AND status != 'completed' AND tenant_id = $2
+		`, employeeID, tenantID).Scan(&pendingTasks)
+		if err != nil {
+			pendingTasks = 0
+		}
+		mu.Lock()
+		stats.PendingTasks = pendingTasks
+		mu.Unlock()
+	}()
 
-	if err != nil {
-		// Handle error jika query gagal
-		stats.CompletionRate = 0
-	} else if totalTasks > 0 {
-		stats.CompletionRate = (completedTasks * 100) / totalTasks
-	} else {
-		stats.CompletionRate = 0
-	}
+	// 3. Check today's attendance
+	go func() {
+		defer wg.Done()
+		var attendanceStatus string
+		err := database.DB.QueryRow(`
+			SELECT CASE 
+				WHEN EXISTS (SELECT 1 FROM godplan.attendances WHERE user_id = $1 AND tenant_id = $2 AND DATE(created_at) = CURRENT_DATE) 
+				THEN 'present' ELSE 'absent' END
+		`, userID, tenantID).Scan(&attendanceStatus)
+		if err != nil {
+			attendanceStatus = "absent"
+		}
+		mu.Lock()
+		stats.AttendanceStatus = attendanceStatus
+		mu.Unlock()
+	}()
+
+	// 4. Calculate completion rate based on tasks status
+	go func() {
+		defer wg.Done()
+		var totalTasks, completedTasks int
+		err := database.DB.QueryRow(`
+			SELECT 
+				COUNT(*) as total,
+				COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed
+			FROM godplan.tasks 
+			WHERE assignee_id = $1 AND tenant_id = $2
+		`, employeeID, tenantID).Scan(&totalTasks, &completedTasks)
+
+		var completionRate int
+		if err != nil {
+			completionRate = 0
+		} else if totalTasks > 0 {
+			completionRate = (completedTasks * 100) / totalTasks
+		} else {
+			completionRate = 0
+		}
+		mu.Lock()
+		stats.CompletionRate = completionRate
+		mu.Unlock()
+	}()
+
+	// Wait for all parallel queries to complete
+	wg.Wait()
 
 	return stats
 }
