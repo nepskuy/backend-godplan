@@ -65,6 +65,8 @@ func setupGin() {
 	router.Use(gin.Recovery())
 	router.Use(middleware.GinCORS())
 	router.Use(middleware.GinLogging())
+	router.Use(middleware.SecurityHeaders())
+	router.Use(middleware.RateLimitMiddleware())
 	router.Use(middleware.GinDatabaseCheck())
 
 	log.Printf("🟢 Gin middleware registered")

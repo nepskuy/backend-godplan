@@ -83,3 +83,9 @@ docker-compose.override.*.yml
 # ===============================
 *.bak
 *.backup
+# ===============================
+# Security / Sensitive Data
+# ===============================
+*.sql
+!init_scripts/*.sql
+temp_*.sql
