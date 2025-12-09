@@ -22,6 +22,7 @@ func NewUserRepository(db *sql.DB) *UserRepository {
 // GetUserByID mendapatkan user berdasarkan ID
 func (r *UserRepository) GetUserByID(tenantID uuid.UUID, id uuid.UUID) (*models.User, error) {
 	var user models.User
+	var phone, avatarURL sql.NullString
 	err := r.db.QueryRow(`
 		SELECT id, tenant_id, username, email, password, role, full_name, phone, avatar_url, is_active, created_at, updated_at
 		FROM godplan.users 
@@ -34,8 +35,8 @@ func (r *UserRepository) GetUserByID(tenantID uuid.UUID, id uuid.UUID) (*models.
 		&user.Password,
 		&user.Role,
 		&user.FullName,
-		&user.Phone,
-		&user.AvatarURL,
+		&phone,
+		&avatarURL,
 		&user.IsActive,
 		&user.CreatedAt,
 		&user.UpdatedAt,
@@ -47,6 +48,9 @@ func (r *UserRepository) GetUserByID(tenantID uuid.UUID, id uuid.UUID) (*models.
 		}
 		return nil, err
 	}
+
+	user.Phone = phone.String
+	user.AvatarURL = avatarURL.String
 
 	return &user, nil
 }
@@ -74,11 +78,12 @@ func (r *UserRepository) GetUserWithEmployeeData(tenantID uuid.UUID, userID uuid
 
 	var user models.User
 	var employeeID, employmentType, workSchedule, departmentName, positionName, status sql.NullString
+	var phone, avatarURL sql.NullString
 	var joinDate sql.NullTime
 
 	err := r.db.QueryRow(query, userID, tenantID).Scan(
-		&user.ID, &user.TenantID, &user.Username, &user.Email, &user.FullName, &user.Phone, &user.Role,
-		&user.AvatarURL, &user.IsActive, &user.CreatedAt, &user.UpdatedAt,
+		&user.ID, &user.TenantID, &user.Username, &user.Email, &user.FullName, &phone, &user.Role,
+		&avatarURL, &user.IsActive, &user.CreatedAt, &user.UpdatedAt,
 		&employeeID, &joinDate, &employmentType, &workSchedule,
 		&departmentName, &positionName, &status,
 	)
@@ -89,6 +94,10 @@ func (r *UserRepository) GetUserWithEmployeeData(tenantID uuid.UUID, userID uuid
 		}
 		return nil, err
 	}
+
+	// Set nullable string values
+	user.Phone = phone.String
+	user.AvatarURL = avatarURL.String
 
 	// Set employee data jika ada
 	if employeeID.Valid {
@@ -119,6 +128,7 @@ func (r *UserRepository) GetUserWithEmployeeData(tenantID uuid.UUID, userID uuid
 // GetUserByEmail mendapatkan user berdasarkan email
 func (r *UserRepository) GetUserByEmail(tenantID uuid.UUID, email string) (*models.User, error) {
 	var user models.User
+	var phone, avatarURL sql.NullString
 	err := r.db.QueryRow(`
 		SELECT id, tenant_id, username, email, password, role, full_name, phone, avatar_url, is_active, created_at, updated_at
 		FROM godplan.users 
@@ -131,8 +141,8 @@ func (r *UserRepository) GetUserByEmail(tenantID uuid.UUID, email string) (*mode
 		&user.Password,
 		&user.Role,
 		&user.FullName,
-		&user.Phone,
-		&user.AvatarURL,
+		&phone,
+		&avatarURL,
 		&user.IsActive,
 		&user.CreatedAt,
 		&user.UpdatedAt,
@@ -145,12 +155,16 @@ func (r *UserRepository) GetUserByEmail(tenantID uuid.UUID, email string) (*mode
 		return nil, err
 	}
 
+	user.Phone = phone.String
+	user.AvatarURL = avatarURL.String
+
 	return &user, nil
 }
 
 // GetUserByUsername mendapatkan user berdasarkan username
 func (r *UserRepository) GetUserByUsername(tenantID uuid.UUID, username string) (*models.User, error) {
 	var user models.User
+	var phone, avatarURL sql.NullString
 	err := r.db.QueryRow(`
 		SELECT id, tenant_id, username, email, password, role, full_name, phone, avatar_url, is_active, created_at, updated_at
 		FROM godplan.users 
@@ -163,8 +177,8 @@ func (r *UserRepository) GetUserByUsername(tenantID uuid.UUID, username string) 
 		&user.Password,
 		&user.Role,
 		&user.FullName,
-		&user.Phone,
-		&user.AvatarURL,
+		&phone,
+		&avatarURL,
 		&user.IsActive,
 		&user.CreatedAt,
 		&user.UpdatedAt,
@@ -176,6 +190,9 @@ func (r *UserRepository) GetUserByUsername(tenantID uuid.UUID, username string) 
 		}
 		return nil, err
 	}
+
+	user.Phone = phone.String
+	user.AvatarURL = avatarURL.String
 
 	return &user, nil
 }
@@ -280,6 +297,7 @@ func (r *UserRepository) GetAllUsers(tenantID uuid.UUID) ([]models.User, error) 
 	var users []models.User
 	for rows.Next() {
 		var user models.User
+		var phone, avatarURL sql.NullString
 		err := rows.Scan(
 			&user.ID,
 			&user.TenantID,
@@ -287,8 +305,8 @@ func (r *UserRepository) GetAllUsers(tenantID uuid.UUID) ([]models.User, error) 
 			&user.Email,
 			&user.Role,
 			&user.FullName,
-			&user.Phone,
-			&user.AvatarURL,
+			&phone,
+			&avatarURL,
 			&user.IsActive,
 			&user.CreatedAt,
 			&user.UpdatedAt,
@@ -299,6 +317,8 @@ func (r *UserRepository) GetAllUsers(tenantID uuid.UUID) ([]models.User, error) 
 			}
 			continue
 		}
+		user.Phone = phone.String
+		user.AvatarURL = avatarURL.String
 		users = append(users, user)
 	}
 

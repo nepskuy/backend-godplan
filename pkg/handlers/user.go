@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"database/sql"
 	"fmt"
 	"time"
 
@@ -68,6 +69,7 @@ func GetUsers(c *gin.Context) {
 	var users []models.User
 	for rows.Next() {
 		var user models.User
+		var phone, avatarURL sql.NullString
 		err := rows.Scan(
 			&user.ID,
 			&user.TenantID,
@@ -75,8 +77,8 @@ func GetUsers(c *gin.Context) {
 			&user.Email,
 			&user.Role,
 			&user.FullName,
-			&user.Phone,
-			&user.AvatarURL,
+			&phone,
+			&avatarURL,
 			&user.IsActive,
 			&user.CreatedAt,
 			&user.UpdatedAt,
@@ -87,6 +89,8 @@ func GetUsers(c *gin.Context) {
 			}
 			continue
 		}
+		user.Phone = phone.String
+		user.AvatarURL = avatarURL.String
 		users = append(users, user)
 	}
 
@@ -185,6 +189,7 @@ func CreateUser(c *gin.Context) {
 
 	// Get the created user to return complete data
 	var createdUser models.User
+	var createdPhone, createdAvatarURL sql.NullString
 	err = database.DB.QueryRow(
 		`SELECT id, tenant_id, username, email, role, full_name, phone, avatar_url, is_active, created_at, updated_at 
 		 FROM godplan.users WHERE id = $1`,
@@ -196,8 +201,8 @@ func CreateUser(c *gin.Context) {
 		&createdUser.Email,
 		&createdUser.Role,
 		&createdUser.FullName,
-		&createdUser.Phone,
-		&createdUser.AvatarURL,
+		&createdPhone,
+		&createdAvatarURL,
 		&createdUser.IsActive,
 		&createdUser.CreatedAt,
 		&createdUser.UpdatedAt,
@@ -210,6 +215,9 @@ func CreateUser(c *gin.Context) {
 		utils.GinErrorResponse(c, 500, "User created but failed to retrieve details")
 		return
 	}
+
+	createdUser.Phone = createdPhone.String
+	createdUser.AvatarURL = createdAvatarURL.String
 
 	if config.IsDevelopment() {
 		fmt.Printf("✅ CreateUser successful: ID=%s, Username=%s, Email=%s\n", createdUser.ID, createdUser.Username, createdUser.Email)
@@ -256,6 +264,7 @@ func GetUser(c *gin.Context) {
 	}
 
 	var user models.User
+	var phone, avatarURL sql.NullString
 	err = database.DB.QueryRow(
 		`SELECT id, tenant_id, username, email, role, full_name, phone, avatar_url, is_active, created_at, updated_at 
 		 FROM godplan.users WHERE id = $1 AND tenant_id = $2 AND is_active = true`,
@@ -267,8 +276,8 @@ func GetUser(c *gin.Context) {
 		&user.Email,
 		&user.Role,
 		&user.FullName,
-		&user.Phone,
-		&user.AvatarURL,
+		&phone,
+		&avatarURL,
 		&user.IsActive,
 		&user.CreatedAt,
 		&user.UpdatedAt,
@@ -281,6 +290,9 @@ func GetUser(c *gin.Context) {
 		utils.GinErrorResponse(c, 404, "User not found")
 		return
 	}
+
+	user.Phone = phone.String
+	user.AvatarURL = avatarURL.String
 
 	if config.IsDevelopment() {
 		fmt.Printf("✅ GetUser successful: ID=%s, Username=%s\n", user.ID, user.Username)
