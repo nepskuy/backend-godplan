@@ -55,7 +55,7 @@ func (r *UserRepository) GetUserByID(tenantID uuid.UUID, id uuid.UUID) (*models.
 func (r *UserRepository) GetUserWithEmployeeData(tenantID uuid.UUID, userID uuid.UUID) (*models.User, error) {
 	query := `
 		SELECT 
-			u.id, u.tenant_id, u.username, u.email, u.name, u.phone, u.role,
+			u.id, u.tenant_id, u.username, u.email, u.full_name, u.phone, u.role,
 			u.avatar_url, u.is_active, u.created_at, u.updated_at,
 			e.employee_id, e.join_date, e.employment_type, e.work_schedule,
 			d.name as department_name, 
@@ -217,7 +217,7 @@ func (r *UserRepository) CreateUser(user *models.User) error {
 func (r *UserRepository) UpdateUser(user *models.User) error {
 	_, err := r.db.Exec(`
 		UPDATE godplan.users 
-		SET username = $1, email = $2, role = $3, name = $4, phone = $5, 
+		SET username = $1, email = $2, role = $3, full_name = $4, phone = $5, 
 		    avatar_url = $6, is_active = $7, updated_at = $8
 		WHERE id = $9 AND tenant_id = $10
 	`,

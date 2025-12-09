@@ -51,7 +51,8 @@ func GetHomeDashboard(c *gin.Context) {
 	// Get user profile data
 	var userName, userAvatar string
 	err = database.DB.QueryRow(`
-		SELECT name, avatar_url FROM godplan.users WHERE id = $1 AND tenant_id = $2
+		SELECT COALESCE(full_name, username) as name, COALESCE(avatar_url, '') as avatar_url 
+		FROM godplan.users WHERE id = $1 AND tenant_id = $2
 	`, userID, tenantID).Scan(&userName, &userAvatar)
 	if err != nil {
 		userName = "User"
@@ -265,9 +266,15 @@ func getTeamMembers(tenantID uuid.UUID, userID uuid.UUID) []models.TeamMember {
 	var members []models.TeamMember
 
 	rows, err := database.DB.Query(`
-		SELECT id, name, avatar_url, position 
-		FROM godplan.users 
-		WHERE id != $1 AND tenant_id = $2 AND is_active = true
+		SELECT 
+			u.id, 
+			COALESCE(u.full_name, u.username) as name, 
+			COALESCE(u.avatar_url, '') as avatar_url,
+			COALESCE(p.name, 'Employee') as position 
+		FROM godplan.users u
+		LEFT JOIN godplan.employees e ON e.user_id = u.id AND e.tenant_id = u.tenant_id
+		LEFT JOIN godplan.positions p ON e.position_id = p.id
+		WHERE u.id != $1 AND u.tenant_id = $2 AND u.is_active = true
 		LIMIT 4
 	`, userID, tenantID)
 

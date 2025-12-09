@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"sync"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/nepskuy/be-godplan/pkg/database"
@@ -11,9 +13,20 @@ import (
 )
 
 var (
-	taskRepo    repository.TaskRepository = repository.NewTaskRepository(database.GetDB())
-	taskService service.TaskService       = service.NewTaskService(taskRepo)
+	taskRepo    repository.TaskRepository
+	taskService service.TaskService
+	taskOnce    sync.Once
 )
+
+// getTaskService returns lazily initialized task service
+// This prevents nil pointer panic when database is not yet connected at package init time
+func getTaskService() service.TaskService {
+	taskOnce.Do(func() {
+		taskRepo = repository.NewTaskRepository(database.GetDB())
+		taskService = service.NewTaskService(taskRepo)
+	})
+	return taskService
+}
 
 // GetTasks godoc
 // @Summary Get all tasks for current user
@@ -65,7 +78,7 @@ func GetTasks(c *gin.Context) {
 		return
 	}
 
-	tasks, err := taskService.GetTasksByAssignee(tenantID, employeeID)
+	tasks, err := getTaskService().GetTasksByAssignee(tenantID, employeeID)
 	if err != nil {
 		utils.GinErrorResponse(c, 500, "Failed to fetch tasks")
 		return
@@ -171,7 +184,7 @@ func CreateTask(c *gin.Context) {
 		Status:         taskReq.Status,
 	}
 
-	err = taskService.CreateTask(task)
+	err = getTaskService().CreateTask(task)
 	if err != nil {
 		utils.GinErrorResponse(c, 500, "Failed to create task")
 		return
@@ -238,7 +251,7 @@ func GetTask(c *gin.Context) {
 	}
 
 	// Validate task access
-	hasAccess, err := taskService.ValidateTaskAccess(tenantID, taskID, employeeID)
+	hasAccess, err := getTaskService().ValidateTaskAccess(tenantID, taskID, employeeID)
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "Task not found")
 		return
@@ -249,7 +262,7 @@ func GetTask(c *gin.Context) {
 		return
 	}
 
-	task, err := taskService.GetTaskByID(tenantID, taskID)
+	task, err := getTaskService().GetTaskByID(tenantID, taskID)
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "Task not found")
 		return
@@ -317,7 +330,7 @@ func UpdateTask(c *gin.Context) {
 	}
 
 	// Validate task access
-	hasAccess, err := taskService.ValidateTaskAccess(tenantID, taskID, employeeID)
+	hasAccess, err := getTaskService().ValidateTaskAccess(tenantID, taskID, employeeID)
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "Task not found")
 		return
@@ -335,7 +348,7 @@ func UpdateTask(c *gin.Context) {
 	}
 
 	// Get existing task
-	existingTask, err := taskService.GetTaskByID(tenantID, taskID)
+	existingTask, err := getTaskService().GetTaskByID(tenantID, taskID)
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "Task not found")
 		return
@@ -375,7 +388,7 @@ func UpdateTask(c *gin.Context) {
 	existingTask.Progress = taskReq.Progress
 	existingTask.Status = taskReq.Status
 
-	err = taskService.UpdateTask(existingTask)
+	err = getTaskService().UpdateTask(existingTask)
 	if err != nil {
 		utils.GinErrorResponse(c, 500, "Failed to update task")
 		return
@@ -442,7 +455,7 @@ func DeleteTask(c *gin.Context) {
 	}
 
 	// Validate task access
-	hasAccess, err := taskService.ValidateTaskAccess(tenantID, taskID, employeeID)
+	hasAccess, err := getTaskService().ValidateTaskAccess(tenantID, taskID, employeeID)
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "Task not found")
 		return
@@ -453,7 +466,7 @@ func DeleteTask(c *gin.Context) {
 		return
 	}
 
-	err = taskService.DeleteTask(tenantID, taskID)
+	err = getTaskService().DeleteTask(tenantID, taskID)
 	if err != nil {
 		if err == repository.ErrTaskNotFound {
 			utils.GinErrorResponse(c, 404, "Task not found")
@@ -516,7 +529,7 @@ func GetUpcomingTasks(c *gin.Context) {
 		return
 	}
 
-	tasks, err := taskService.GetUpcomingTasks(tenantID, employeeID, 3)
+	tasks, err := getTaskService().GetUpcomingTasks(tenantID, employeeID, 3)
 	if err != nil {
 		utils.GinErrorResponse(c, 500, "Failed to fetch upcoming tasks")
 		return
@@ -584,7 +597,7 @@ func ToggleTaskCompletion(c *gin.Context) {
 	}
 
 	// Validate task access
-	hasAccess, err := taskService.ValidateTaskAccess(tenantID, taskID, employeeID)
+	hasAccess, err := getTaskService().ValidateTaskAccess(tenantID, taskID, employeeID)
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "Task not found")
 		return
@@ -601,13 +614,13 @@ func ToggleTaskCompletion(c *gin.Context) {
 		return
 	}
 
-	err = taskService.ToggleTaskCompletion(tenantID, taskID, toggleReq.Completed)
+	err = getTaskService().ToggleTaskCompletion(tenantID, taskID, toggleReq.Completed)
 	if err != nil {
 		utils.GinErrorResponse(c, 500, "Failed to toggle task completion")
 		return
 	}
 
-	task, err := taskService.GetTaskByID(tenantID, taskID)
+	task, err := getTaskService().GetTaskByID(tenantID, taskID)
 	if err != nil {
 		utils.GinErrorResponse(c, 500, "Task updated but failed to retrieve")
 		return
@@ -675,7 +688,7 @@ func UpdateTaskCategory(c *gin.Context) {
 	}
 
 	// Validate task access
-	hasAccess, err := taskService.ValidateTaskAccess(tenantID, taskID, employeeID)
+	hasAccess, err := getTaskService().ValidateTaskAccess(tenantID, taskID, employeeID)
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "Task not found")
 		return
@@ -692,13 +705,13 @@ func UpdateTaskCategory(c *gin.Context) {
 		return
 	}
 
-	err = taskService.UpdateTaskCategory(tenantID, taskID, categoryReq.Category)
+	err = getTaskService().UpdateTaskCategory(tenantID, taskID, categoryReq.Category)
 	if err != nil {
 		utils.GinErrorResponse(c, 500, "Failed to update task category")
 		return
 	}
 
-	task, err := taskService.GetTaskByID(tenantID, taskID)
+	task, err := getTaskService().GetTaskByID(tenantID, taskID)
 	if err != nil {
 		utils.GinErrorResponse(c, 500, "Category updated but failed to retrieve task")
 		return
@@ -766,7 +779,7 @@ func UpdateTaskProgress(c *gin.Context) {
 	}
 
 	// Validate task access
-	hasAccess, err := taskService.ValidateTaskAccess(tenantID, taskID, employeeID)
+	hasAccess, err := getTaskService().ValidateTaskAccess(tenantID, taskID, employeeID)
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "Task not found")
 		return
@@ -786,7 +799,7 @@ func UpdateTaskProgress(c *gin.Context) {
 		return
 	}
 
-	err = taskService.UpdateTaskProgress(tenantID, taskID, progressReq.Progress)
+	err = getTaskService().UpdateTaskProgress(tenantID, taskID, progressReq.Progress)
 	if err != nil {
 		if err == repository.ErrInvalidProgress {
 			utils.GinErrorResponse(c, 400, "Progress must be between 0 and 100")
@@ -796,7 +809,7 @@ func UpdateTaskProgress(c *gin.Context) {
 		return
 	}
 
-	task, err := taskService.GetTaskByID(tenantID, taskID)
+	task, err := getTaskService().GetTaskByID(tenantID, taskID)
 	if err != nil {
 		utils.GinErrorResponse(c, 500, "Progress updated but failed to retrieve task")
 		return
@@ -863,7 +876,7 @@ func CompleteTask(c *gin.Context) {
 	}
 
 	// Validate task access
-	hasAccess, err := taskService.ValidateTaskAccess(tenantID, taskID, employeeID)
+	hasAccess, err := getTaskService().ValidateTaskAccess(tenantID, taskID, employeeID)
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "Task not found")
 		return
@@ -874,13 +887,13 @@ func CompleteTask(c *gin.Context) {
 		return
 	}
 
-	err = taskService.CompleteTask(tenantID, taskID)
+	err = getTaskService().CompleteTask(tenantID, taskID)
 	if err != nil {
 		utils.GinErrorResponse(c, 500, "Failed to complete task")
 		return
 	}
 
-	task, err := taskService.GetTaskByID(tenantID, taskID)
+	task, err := getTaskService().GetTaskByID(tenantID, taskID)
 	if err != nil {
 		utils.GinErrorResponse(c, 500, "Task completed but failed to retrieve")
 		return
@@ -939,7 +952,7 @@ func GetTaskStatistics(c *gin.Context) {
 		return
 	}
 
-	statistics, err := taskService.GetTaskStatistics(tenantID, employeeID)
+	statistics, err := getTaskService().GetTaskStatistics(tenantID, employeeID)
 	if err != nil {
 		utils.GinErrorResponse(c, 500, "Failed to fetch task statistics")
 		return

@@ -449,12 +449,12 @@ func GetAttendance(c *gin.Context) {
 
 	if dateFilter != "" {
 		rows, err = database.DB.Query(
-			"SELECT id, user_id, type, status, latitude, longitude, photo_selfie, in_range, force_attendance, created_at FROM attendances WHERE user_id = $1 AND tenant_id = $2 AND DATE(created_at) = $3 ORDER BY created_at DESC LIMIT $4",
+			"SELECT id, user_id, type, status, latitude, longitude, photo_selfie, in_range, force_attendance, created_at FROM godplan.attendances WHERE user_id = $1 AND tenant_id = $2 AND DATE(created_at) = $3 ORDER BY created_at DESC LIMIT $4",
 			userID, tenantID, dateFilter, limit,
 		)
 	} else {
 		rows, err = database.DB.Query(
-			"SELECT id, user_id, type, status, latitude, longitude, photo_selfie, in_range, force_attendance, created_at FROM attendances WHERE user_id = $1 AND tenant_id = $2 ORDER BY created_at DESC LIMIT $3",
+			"SELECT id, user_id, type, status, latitude, longitude, photo_selfie, in_range, force_attendance, created_at FROM godplan.attendances WHERE user_id = $1 AND tenant_id = $2 ORDER BY created_at DESC LIMIT $3",
 			userID, tenantID, limit,
 		)
 	}

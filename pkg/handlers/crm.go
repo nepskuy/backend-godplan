@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"sync"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/nepskuy/be-godplan/pkg/database"
@@ -11,9 +13,20 @@ import (
 )
 
 var (
-	crmRepo    repository.CRMRepository = repository.NewCRMRepository(database.GetDB())
-	crmService service.CRMService       = service.NewCRMService(crmRepo)
+	crmRepo    repository.CRMRepository
+	crmService service.CRMService
+	crmOnce    sync.Once
 )
+
+// getCRMService returns lazily initialized CRM service
+// This prevents nil pointer panic when database is not yet connected at package init time
+func getCRMService() service.CRMService {
+	crmOnce.Do(func() {
+		crmRepo = repository.NewCRMRepository(database.GetDB())
+		crmService = service.NewCRMService(crmRepo)
+	})
+	return crmService
+}
 
 // GetCRMProjects godoc
 // @Summary Get CRM projects for current user
@@ -65,7 +78,7 @@ func GetCRMProjects(c *gin.Context) {
 		return
 	}
 
-	projects, err := crmService.GetProjectsByManager(tenantID, managerID)
+	projects, err := getCRMService().GetProjectsByManager(tenantID, managerID)
 	if err != nil {
 		utils.GinErrorResponse(c, 500, "Failed to fetch CRM projects")
 		return
@@ -142,7 +155,7 @@ func CreateCRMProject(c *gin.Context) {
 		ManagerID:     managerID,
 	}
 
-	if err := crmService.CreateProject(project); err != nil {
+	if err := getCRMService().CreateProject(project); err != nil {
 		utils.GinErrorResponse(c, 500, "Failed to create CRM project")
 		return
 	}
@@ -205,7 +218,7 @@ func GetCRMProject(c *gin.Context) {
 		return
 	}
 
-	hasAccess, err := crmService.ValidateProjectAccess(tenantID, projectID, managerID)
+	hasAccess, err := getCRMService().ValidateProjectAccess(tenantID, projectID, managerID)
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "CRM project not found")
 		return
@@ -215,7 +228,7 @@ func GetCRMProject(c *gin.Context) {
 		return
 	}
 
-	project, err := crmService.GetProjectByID(tenantID, projectID)
+	project, err := getCRMService().GetProjectByID(tenantID, projectID)
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "CRM project not found")
 		return
@@ -280,7 +293,7 @@ func UpdateCRMProject(c *gin.Context) {
 		return
 	}
 
-	hasAccess, err := crmService.ValidateProjectAccess(tenantID, projectID, managerID)
+	hasAccess, err := getCRMService().ValidateProjectAccess(tenantID, projectID, managerID)
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "CRM project not found")
 		return
@@ -296,7 +309,7 @@ func UpdateCRMProject(c *gin.Context) {
 		return
 	}
 
-	project, err := crmService.GetProjectByID(tenantID, projectID)
+	project, err := getCRMService().GetProjectByID(tenantID, projectID)
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "CRM project not found")
 		return
@@ -313,7 +326,7 @@ func UpdateCRMProject(c *gin.Context) {
 	project.Category = req.Category
 	project.Status = req.Status
 
-	if err := crmService.UpdateProject(project); err != nil {
+	if err := getCRMService().UpdateProject(project); err != nil {
 		utils.GinErrorResponse(c, 500, "Failed to update CRM project")
 		return
 	}
@@ -376,7 +389,7 @@ func DeleteCRMProject(c *gin.Context) {
 		return
 	}
 
-	hasAccess, err := crmService.ValidateProjectAccess(tenantID, projectID, managerID)
+	hasAccess, err := getCRMService().ValidateProjectAccess(tenantID, projectID, managerID)
 	if err != nil {
 		utils.GinErrorResponse(c, 404, "CRM project not found")
 		return
@@ -386,7 +399,7 @@ func DeleteCRMProject(c *gin.Context) {
 		return
 	}
 
-	if err := crmService.DeleteProject(tenantID, projectID); err != nil {
+	if err := getCRMService().DeleteProject(tenantID, projectID); err != nil {
 		utils.GinErrorResponse(c, 500, "Failed to delete CRM project")
 		return
 	}

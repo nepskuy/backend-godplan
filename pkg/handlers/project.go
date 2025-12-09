@@ -80,7 +80,7 @@ func GetProjects(c *gin.Context) {
 			p.status, 
 			p.progress,
 			p.manager_id,
-			COALESCE(u.name, '') as manager_name,
+			COALESCE(u.full_name, '') as manager_name,
 			COALESCE(pp.name, '') as phase_name
 		FROM godplan.projects p
 		LEFT JOIN godplan.employees e ON p.manager_id = e.id
@@ -172,7 +172,7 @@ func GetProject(c *gin.Context) {
 			p.status, 
 			p.progress,
 			p.manager_id,
-			COALESCE(u.name, '') as manager_name,
+			COALESCE(u.full_name, '') as manager_name,
 			COALESCE(pp.name, '') as phase_name
 		FROM godplan.projects p
 		LEFT JOIN godplan.employees e ON p.manager_id = e.id
