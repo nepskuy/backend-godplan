@@ -2,14 +2,23 @@ package middleware
 
 import (
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/nepskuy/be-godplan/pkg/utils"
 )
 
-// JWT util instance - PASTIKAN ADA DI SINI
-var jwtUtil = utils.NewJWTUtil("your-secret-key-change-in-production")
+// getEnv helper to get env with default
+func getEnv(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
+// JWT util instance - uses JWT_SECRET from environment for cross-backend compatibility
+var jwtUtil = utils.NewJWTUtil(getEnv("JWT_SECRET", "dev-secret-key-change-in-production"))
 
 // GinAuthMiddleware untuk framework Gin
 func GinAuthMiddleware() gin.HandlerFunc {
