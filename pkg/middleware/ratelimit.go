@@ -3,14 +3,20 @@ package middleware
 import (
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/time/rate"
 )
 
+type client struct {
+	limiter  *rate.Limiter
+	lastSeen time.Time
+}
+
 // IPRateLimiter manages rate limiters for each IP address
 type IPRateLimiter struct {
-	ips map[string]*rate.Limiter
+	ips map[string]*client
 	mu  *sync.RWMutex
 	r   rate.Limit
 	b   int
@@ -18,27 +24,52 @@ type IPRateLimiter struct {
 
 // NewIPRateLimiter creates a new rate limiter manager
 func NewIPRateLimiter(r rate.Limit, b int) *IPRateLimiter {
-	return &IPRateLimiter{
-		ips: make(map[string]*rate.Limiter),
+	i := &IPRateLimiter{
+		ips: make(map[string]*client),
 		mu:  &sync.RWMutex{},
 		r:   r,
 		b:   b,
 	}
+
+	// Start background cleanup
+	go i.cleanup()
+
+	return i
+}
+
+// cleanup removes old entries to prevent memory leaks
+func (i *IPRateLimiter) cleanup() {
+	for {
+		time.Sleep(1 * time.Minute)
+
+		i.mu.Lock()
+		for ip, client := range i.ips {
+			if time.Since(client.lastSeen) > 3*time.Minute {
+				delete(i.ips, ip)
+			}
+		}
+		i.mu.Unlock()
+	}
 }
 
 // GetLimiter returns the rate limiter for the provided IP address
-// If one does not exist, it creates a new one
 func (i *IPRateLimiter) GetLimiter(ip string) *rate.Limiter {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
-	limiter, exists := i.ips[ip]
+	c, exists := i.ips[ip]
 	if !exists {
-		limiter = rate.NewLimiter(i.r, i.b)
-		i.ips[ip] = limiter
+		limiter := rate.NewLimiter(i.r, i.b)
+		c = &client{
+			limiter:  limiter,
+			lastSeen: time.Now(),
+		}
+		i.ips[ip] = c
+	} else {
+		c.lastSeen = time.Now()
 	}
 
-	return limiter
+	return c.limiter
 }
 
 // RateLimitMiddleware creates a middleware for rate limiting based on IP

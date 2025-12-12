@@ -92,7 +92,9 @@ func setupGin() {
 		{
 			public.POST("/register", handlers.Register)
 			public.POST("/login", handlers.Login)
+			public.POST("/refresh", handlers.RefreshToken)
 		}
+
 
 		// Protected routes - Authentication required
 		protected := api.Group("")

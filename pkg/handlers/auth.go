@@ -40,70 +40,45 @@ var jwtUtil = utils.NewJWTUtil("your-secret-key-change-in-production")
 // @Failure 400 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
 // @Router /api/v1/auth/register [post]  //
+// Register godoc
+// @Summary Register a new user
+// @Description Create a new user account with complete profile data
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body models.UserRegistrationRequest true "User registration data"
+// @Success 201 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /api/v1/auth/register [post]
 func Register(c *gin.Context) {
-	// Check database connection first
+	// Check database connection
 	if err := database.HealthCheck(); err != nil {
-		if config.IsDevelopment() {
-			fmt.Printf("❌ Database connection error in Register: %v\n", err)
-		}
-		c.JSON(503, gin.H{
-			"success": false,
-			"error":   "Database connection lost",
-		})
+		c.JSON(503, gin.H{"success": false, "error": "Service temporarily unavailable"})
 		return
 	}
 
 	var req models.UserRegistrationRequest
-
+	// 1. Validation using struct tags
 	if err := c.ShouldBindJSON(&req); err != nil {
+		// Nice error message formatting
 		c.JSON(400, gin.H{
 			"success": false,
-			"error":   "Invalid JSON format",
+			"error":   "Validation failed: " + utils.FormatValidationError(err),
 		})
 		return
 	}
 
-	// Required fields validation
-	if req.Username == "" || req.FullName == "" || req.Email == "" || req.Password == "" {
-		c.JSON(400, gin.H{
-			"success": false,
-			"error":   "Required fields: username, full_name, email, password",
-		})
+	// 2. Extra custom validation
+	if len(req.Password) < 8 {
+		c.JSON(400, gin.H{"success": false, "error": "Password must be at least 8 characters"})
 		return
-	}
-
-	if !strings.Contains(req.Email, "@") || !strings.Contains(req.Email, ".") {
-		c.JSON(400, gin.H{
-			"success": false,
-			"error":   "Invalid email format",
-		})
-		return
-	}
-
-	if len(req.Password) < 6 {
-		c.JSON(400, gin.H{
-			"success": false,
-			"error":   "Password must be at least 6 characters",
-		})
-		return
-	}
-
-	// DEBUG: Print received data
-	if config.IsDevelopment() {
-		fmt.Printf("📥 REGISTER ATTEMPT - Username: %s, Email: %s, FullName: %s, Role: %s\n",
-			req.Username, req.Email, req.FullName, req.Role)
 	}
 
 	// Hash password
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		if config.IsDevelopment() {
-			fmt.Printf("❌ Failed to hash password: %v\n", err)
-		}
-		c.JSON(500, gin.H{
-			"success": false,
-			"error":   "Failed to process request",
-		})
+		c.JSON(500, gin.H{"success": false, "error": "Internal server error"})
 		return
 	}
 
@@ -112,153 +87,66 @@ func Register(c *gin.Context) {
 		req.Role = "employee"
 	}
 
-	// Gunakan context dengan timeout untuk query database
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
-	// Default Tenant ID
 	defaultTenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
-
 	var userID uuid.UUID
+
+	// 3. Database Insertion with Safe Error Handling
 	err = database.DB.QueryRowContext(ctx,
 		`INSERT INTO godplan.users 
 			(tenant_id, username, email, password, role, full_name, phone, avatar_url, is_active, created_at, updated_at) 
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) 
 		 RETURNING id`,
-		defaultTenantID,
-		req.Username,
-		req.Email,
-		string(hashedPassword),
-		req.Role,
-		req.FullName,
-		req.Phone,
-		"",   // avatar_url kosong
-		true, // is_active
-		time.Now(),
-		time.Now(),
+		defaultTenantID, req.Username, req.Email, string(hashedPassword), req.Role, req.FullName, req.Phone, "", true, time.Now(), time.Now(),
 	).Scan(&userID)
 
 	if err != nil {
+		// Log the real error internally
 		if config.IsDevelopment() {
-			fmt.Printf("❌ Failed to create user: %v\n", err)
-
-			// Check if user already exists
-			var usernameCount, emailCount int
-			database.DB.QueryRow("SELECT COUNT(*) FROM godplan.users WHERE username = $1 AND tenant_id = $2", req.Username, defaultTenantID).Scan(&usernameCount)
-			database.DB.QueryRow("SELECT COUNT(*) FROM godplan.users WHERE email = $1 AND tenant_id = $2", req.Email, defaultTenantID).Scan(&emailCount)
-
-			fmt.Printf("🔍 Username '%s' exists: %d, Email '%s' exists: %d\n",
-				req.Username, usernameCount, req.Email, emailCount)
+			fmt.Printf("❌ Register DB Error: %v\n", err)
 		}
-
+		
+		// Return safe error to client
 		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
-			c.JSON(409, gin.H{
-				"success": false,
-				"error":   "User with this email or username already exists",
-			})
+			c.JSON(409, gin.H{"success": false, "error": "Username or email already exists"})
 		} else {
-			c.JSON(500, gin.H{
-				"success": false,
-				"error":   "Failed to create user - " + err.Error(),
-			})
+			c.JSON(500, gin.H{"success": false, "error": "Failed to create account. Please try again later."})
 		}
 		return
 	}
 
-	// ✅ AUTO-CREATE EMPLOYEE RECORD FOR EMPLOYEE ROLE
+	// Auto-create employee record (logic preserved)
 	if req.Role == "employee" {
-		// Use UUID for employee ID logic if needed, but here we just use a string format
-		// Since userID is UUID, we can't use %04d. We'll use a random suffix or part of UUID.
 		employeeID := fmt.Sprintf("EMP-%s", userID.String()[:8])
-		if config.IsDevelopment() {
-			fmt.Printf("👨‍💼 Creating employee record - UserID: %s, EmployeeID: %s\n", userID, employeeID)
-		}
-
-		_, err = database.DB.ExecContext(ctx,
-			`INSERT INTO godplan.employees 
-			 (tenant_id, user_id, employee_id, position_id, department_id, join_date, created_at, updated_at) 
-			 VALUES ($1, $2, $3, NULL, NULL, $4, $5, $6)`,
-			defaultTenantID,
-			userID,
-			employeeID,
-			time.Now(), // Join date
-			time.Now(),
-			time.Now(),
+		database.DB.ExecContext(ctx,
+			`INSERT INTO godplan.employees (tenant_id, user_id, employee_id, join_date, created_at, updated_at) 
+			 VALUES ($1, $2, $3, $4, $5, $6)`,
+			defaultTenantID, userID, employeeID, time.Now(), time.Now(), time.Now(),
 		)
-
-		if err != nil {
-			if config.IsDevelopment() {
-				fmt.Printf("⚠️ Failed to create employee record: %v\n", err)
-			}
-			// Jangan return error di sini, karena user sudah berhasil dibuat
-			// Employee record bisa dibuat manual nanti
-		} else {
-			if config.IsDevelopment() {
-				fmt.Printf("✅ Employee record created successfully\n")
-			}
-		}
 	}
 
-	// Get the created user to return complete data
+	// Fetch created user for response
 	var createdUser models.User
 	var phone, avatarURL sql.NullString
-	err = database.DB.QueryRowContext(ctx,
-		`SELECT id, tenant_id, username, email, role, full_name, phone, avatar_url, is_active, created_at, updated_at 
-		 FROM godplan.users WHERE id = $1`,
-		userID,
-	).Scan(
-		&createdUser.ID,
-		&createdUser.TenantID,
-		&createdUser.Username,
-		&createdUser.Email,
-		&createdUser.Role,
-		&createdUser.FullName,
-		&phone,
-		&avatarURL,
-		&createdUser.IsActive,
-		&createdUser.CreatedAt,
-		&createdUser.UpdatedAt,
-	)
+	database.DB.QueryRowContext(ctx, `SELECT id, tenant_id, username, email, role, full_name, phone, avatar_url, is_active, created_at, updated_at FROM godplan.users WHERE id = $1`, userID).
+		Scan(&createdUser.ID, &createdUser.TenantID, &createdUser.Username, &createdUser.Email, &createdUser.Role, &createdUser.FullName, &phone, &avatarURL, &createdUser.IsActive, &createdUser.CreatedAt, &createdUser.UpdatedAt)
 	
 	createdUser.Phone = phone.String
 	createdUser.AvatarURL = avatarURL.String
 
-	if err != nil {
-		if config.IsDevelopment() {
-			fmt.Printf("❌ Failed to fetch created user: %v\n", err)
-		}
-		c.JSON(500, gin.H{
-			"success": false,
-			"error":   "User created but failed to retrieve details",
-		})
-		return
-	}
+	// 4. Generate Tokens (Access + Refresh)
+	accessToken, _ := jwtUtil.GenerateToken(createdUser.ID, createdUser.Email, createdUser.Role, createdUser.TenantID)
+	refreshToken, _ := jwtUtil.GenerateRefreshToken(createdUser.ID, createdUser.TenantID)
 
-	// Generate JWT token
-	token, err := jwtUtil.GenerateToken(createdUser.ID, createdUser.Email, createdUser.Role, createdUser.TenantID)
-	if err != nil {
-		if config.IsDevelopment() {
-			fmt.Printf("❌ Failed to generate token: %v\n", err)
-		}
-		c.JSON(500, gin.H{
-			"success": false,
-			"error":   "Failed to process request",
-		})
-		return
-	}
-
-	if config.IsDevelopment() {
-		fmt.Printf("✅ User registered successfully - ID: %s, Email: %s, Role: %s\n",
-			createdUser.ID, createdUser.Email, createdUser.Role)
-	}
-
-	// Return response with complete user data
 	c.JSON(201, gin.H{
 		"success": true,
 		"message": "User registered successfully",
 		"data": map[string]interface{}{
-			"token": token,
-			"user":  createdUser,
+			"token":         accessToken,
+			"refresh_token": refreshToken,
+			"user":          createdUser,
 		},
 	})
 }
@@ -275,114 +163,127 @@ func Register(c *gin.Context) {
 // @Failure 401 {object} map[string]interface{}
 // @Router /api/v1/auth/login [post]
 func Login(c *gin.Context) {
-	// Check database connection first
 	if err := database.HealthCheck(); err != nil {
-		if config.IsDevelopment() {
-			fmt.Printf("❌ Database connection error in Login: %v\n", err)
-		}
-		c.JSON(503, gin.H{
-			"success": false,
-			"error":   "Database connection lost",
-		})
+		c.JSON(503, gin.H{"success": false, "error": "Service temporarily unavailable"})
 		return
 	}
 
 	var credentials models.LoginRequest
-
+	// 1. Validation
 	if err := c.ShouldBindJSON(&credentials); err != nil {
-		c.JSON(400, gin.H{
-			"success": false,
-			"error":   "Invalid JSON format",
-		})
+		c.JSON(400, gin.H{"success": false, "error": "Validation failed: " + utils.FormatValidationError(err)})
 		return
 	}
 
-	if credentials.Email == "" || credentials.Password == "" {
-		c.JSON(400, gin.H{
-			"success": false,
-			"error":   "Email and password are required",
-		})
-		return
-	}
-
-	// Use context with timeout
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
-	var phone, avatarURL sql.NullString
 	var user models.User
+	var phone, avatarURL sql.NullString
+	
+	// 2. Safe Query
 	err := database.DB.QueryRowContext(ctx,
-		`SELECT id, tenant_id, username, email, password, role, full_name, phone, 
-			avatar_url, is_active, created_at, updated_at
+		`SELECT id, tenant_id, username, email, password, role, full_name, phone, avatar_url, is_active, created_at, updated_at
 		 FROM godplan.users WHERE email = $1 AND is_active = true`,
 		credentials.Email,
-	).Scan(
-		&user.ID,
-		&user.TenantID,
-		&user.Username,
-		&user.Email,
-		&user.Password,
-		&user.Role,
-		&user.FullName,
-		&phone,
-		&avatarURL,
-		&user.IsActive,
-		&user.CreatedAt,
-		&user.UpdatedAt,
-	)
-	
+	).Scan(&user.ID, &user.TenantID, &user.Username, &user.Email, &user.Password, &user.Role, &user.FullName, &phone, &avatarURL, &user.IsActive, &user.CreatedAt, &user.UpdatedAt)
+
 	user.Phone = phone.String
 	user.AvatarURL = avatarURL.String
 
+	// Generic error for securities
+	invalidCredentialsMsg := "Invalid email or password"
+
 	if err != nil {
-		c.JSON(401, gin.H{
-			"success": false,
-			"error":   "Invalid credentials",
-		})
+		c.JSON(401, gin.H{"success": false, "error": invalidCredentialsMsg})
 		return
 	}
 
-	// Verify password
-	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(credentials.Password))
-	if err != nil {
-		c.JSON(401, gin.H{
-			"success": false,
-			"error":   "Invalid credentials",
-		})
+	// 3. Password Check
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(credentials.Password)); err != nil {
+		c.JSON(401, gin.H{"success": false, "error": invalidCredentialsMsg})
 		return
 	}
 
-	if config.IsDevelopment() {
-		fmt.Printf("✅ Password verified successfully\n")
-	}
-
-	// Generate JWT token
-	token, err := jwtUtil.GenerateToken(user.ID, user.Email, user.Role, user.TenantID)
+	// 4. Generate Tokens
+	accessToken, err := jwtUtil.GenerateToken(user.ID, user.Email, user.Role, user.TenantID)
 	if err != nil {
-		if config.IsDevelopment() {
-			fmt.Printf("❌ Token generation failed: %v\n", err)
-		}
-		c.JSON(500, gin.H{
-			"success": false,
-			"error":   "Failed to process request",
-		})
+		c.JSON(500, gin.H{"success": false, "error": "Failed to generate session"})
+		return
+	}
+	
+	refreshToken, err := jwtUtil.GenerateRefreshToken(user.ID, user.TenantID)
+	if err != nil {
+		c.JSON(500, gin.H{"success": false, "error": "Failed to generate session"})
 		return
 	}
 
-	if config.IsDevelopment() {
-		fmt.Printf("✅ Login successful - User ID: %s, Role: %s\n", user.ID, user.Role)
-	}
+	user.Password = "" // Hide password
 
-	// Clear password before returning user data
-	user.Password = ""
-
-	// Return response dengan data user lengkap
 	c.JSON(200, gin.H{
 		"success": true,
 		"message": "Login successful",
 		"data": map[string]interface{}{
-			"token": token,
-			"user":  user,
+			"token":         accessToken,
+			"refresh_token": refreshToken,
+			"user":          user,
 		},
 	})
 }
+
+// RefreshToken godoc
+// @Summary Refresh Access Token
+// @Description Get a new access token using a refresh token
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body map[string]string true "Refresh Token"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Router /api/v1/auth/refresh [post]
+func RefreshToken(c *gin.Context) {
+	var body struct {
+		RefreshToken string `json:"refresh_token" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(400, gin.H{"success": false, "error": "refresh_token is required"})
+		return
+	}
+
+	// Validate Refresh Token
+	claims, err := jwtUtil.ValidateRefreshToken(body.RefreshToken)
+	if err != nil {
+		c.JSON(401, gin.H{"success": false, "error": "Invalid or expired refresh token"})
+		return
+	}
+
+	// Get fresh user data (to ensure role/email hasn't changed)
+	var user models.User
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+
+	err = database.DB.QueryRowContext(ctx, 
+		"SELECT email, role FROM godplan.users WHERE id = $1 AND is_active = true", 
+		claims.UserID).Scan(&user.Email, &user.Role)
+	
+	if err != nil {
+		c.JSON(401, gin.H{"success": false, "error": "User no longer active"})
+		return
+	}
+
+	// Generate NEW Access Token
+	newAccessToken, err := jwtUtil.GenerateToken(claims.UserID, user.Email, user.Role, claims.TenantID)
+	if err != nil {
+		c.JSON(500, gin.H{"success": false, "error": "Failed to generate token"})
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"success": true,
+		"data": map[string]string{
+			"token": newAccessToken,
+		},
+	})
+}
+

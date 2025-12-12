@@ -23,15 +23,6 @@ var jwtUtil = utils.NewJWTUtil(getEnv("JWT_SECRET", "dev-secret-key-change-in-pr
 // GinAuthMiddleware untuk framework Gin
 func GinAuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Skip auth for public routes
-		if c.Request.URL.Path == "/api/v1/auth/login" ||
-			c.Request.URL.Path == "/api/v1/auth/register" ||
-			c.Request.URL.Path == "/health" ||
-			c.Request.URL.Path == "/api/v1/health" {
-			c.Next()
-			return
-		}
-
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header required"})
@@ -65,3 +56,4 @@ func GinAuthMiddleware() gin.HandlerFunc {
 		c.Next()
 	}
 }
+
