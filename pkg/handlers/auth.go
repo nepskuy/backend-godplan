@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -16,7 +17,16 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-var jwtUtil = utils.NewJWTUtil("your-secret-key-change-in-production")
+// getEnv helper to get env with default
+func getEnv(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
+// JWT util instance - uses JWT_SECRET from environment for consistency with middleware
+var jwtUtil = utils.NewJWTUtil(getEnv("JWT_SECRET", "dev-secret-key-change-in-production"))
 
 // Register godoc
 // @Summary Register a new user
