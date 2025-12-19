@@ -39,6 +39,9 @@ type AttendanceResponse struct {
 	UserID          uuid.UUID `json:"user_id"`
 	Type            string    `json:"type"`
 	Status          string    `json:"status"`
+	Date            string    `json:"date"`           // Added for mobile
+	Time            string    `json:"time"`           // Added for mobile
+	LocationName    string    `json:"location_name"` // Added for mobile
 	Latitude        float64   `json:"latitude"`
 	Longitude       float64   `json:"longitude"`
 	PhotoSelfie     string    `json:"photo_selfie,omitempty"`
@@ -449,12 +452,22 @@ func GetAttendance(c *gin.Context) {
 
 	if dateFilter != "" {
 		rows, err = database.DB.Query(
-			"SELECT id, user_id, type, status, latitude, longitude, photo_selfie, in_range, force_attendance, created_at FROM godplan.attendances WHERE user_id = $1 AND tenant_id = $2 AND DATE(created_at) = $3 ORDER BY created_at DESC LIMIT $4",
+			`SELECT id, user_id, type, status, attendance_date, 
+				COALESCE(TO_CHAR(check_in_time, 'HH24:MI'), TO_CHAR(created_at, 'HH24:MI')) as time,
+				latitude, longitude, photo_selfie, in_range, force_attendance, created_at 
+			FROM godplan.attendances 
+			WHERE user_id = $1 AND tenant_id = $2 AND attendance_date = $3 
+			ORDER BY created_at DESC LIMIT $4`,
 			userID, tenantID, dateFilter, limit,
 		)
 	} else {
 		rows, err = database.DB.Query(
-			"SELECT id, user_id, type, status, latitude, longitude, photo_selfie, in_range, force_attendance, created_at FROM godplan.attendances WHERE user_id = $1 AND tenant_id = $2 ORDER BY created_at DESC LIMIT $3",
+			`SELECT id, user_id, type, status, attendance_date, 
+				COALESCE(TO_CHAR(check_in_time, 'HH24:MI'), TO_CHAR(created_at, 'HH24:MI')) as time,
+				latitude, longitude, photo_selfie, in_range, force_attendance, created_at 
+			FROM godplan.attendances 
+			WHERE user_id = $1 AND tenant_id = $2 
+			ORDER BY created_at DESC LIMIT $3`,
 			userID, tenantID, limit,
 		)
 	}
@@ -471,8 +484,12 @@ func GetAttendance(c *gin.Context) {
 	var attendances []AttendanceResponse
 	for rows.Next() {
 		var att models.Attendance
+		var attendanceDate string
+		var attendanceTime string
+		
 		err := rows.Scan(
 			&att.ID, &att.UserID, &att.Type, &att.Status,
+			&attendanceDate, &attendanceTime,
 			&att.Latitude, &att.Longitude, &att.PhotoSelfie,
 			&att.InRange, &att.ForceAttendance, &att.CreatedAt,
 		)
@@ -488,6 +505,9 @@ func GetAttendance(c *gin.Context) {
 			UserID:          att.UserID,
 			Type:            att.Type,
 			Status:          att.Status,
+			Date:            attendanceDate,
+			Time:            attendanceTime,
+			LocationName:    "Kantor Pusat Godplan", // Default location name
 			Latitude:        att.Latitude,
 			Longitude:       att.Longitude,
 			PhotoSelfie:     att.PhotoSelfie,

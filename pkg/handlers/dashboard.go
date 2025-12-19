@@ -220,7 +220,7 @@ func getDashboardStats(tenantID uuid.UUID, userID uuid.UUID) models.DashboardSta
 		var attendanceStatus string
 		err := database.DB.QueryRow(`
 			SELECT CASE 
-				WHEN EXISTS (SELECT 1 FROM godplan.attendances WHERE user_id = $1 AND tenant_id = $2 AND DATE(created_at) = CURRENT_DATE) 
+				WHEN EXISTS (SELECT 1 FROM godplan.attendances WHERE user_id = $1 AND tenant_id = $2 AND attendance_date = CURRENT_DATE) 
 				THEN 'present' ELSE 'absent' END
 		`, userID, tenantID).Scan(&attendanceStatus)
 		if err != nil {
@@ -279,54 +279,21 @@ func getTeamMembers(tenantID uuid.UUID, userID uuid.UUID) []models.TeamMember {
 	`, userID, tenantID)
 
 	if err != nil {
-		// Fallback data
-		members = getFallbackTeamMembers()
-	} else {
-		defer rows.Close()
+		// Return empty array instead of fallback
+		return []models.TeamMember{}
+	}
+	
+	defer rows.Close()
 
-		for rows.Next() {
-			var member models.TeamMember
-			if err := rows.Scan(&member.ID, &member.Name, &member.AvatarURL, &member.Position); err == nil {
-				members = append(members, member)
-			}
-		}
-
-		// Handle jika tidak ada data dari database
-		if len(members) == 0 {
-			members = getFallbackTeamMembers()
+	for rows.Next() {
+		var member models.TeamMember
+		if err := rows.Scan(&member.ID, &member.Name, &member.AvatarURL, &member.Position); err == nil {
+			members = append(members, member)
 		}
 	}
 
+	// Return whatever we got from database (could be empty)
 	return members
-}
-
-func getFallbackTeamMembers() []models.TeamMember {
-	return []models.TeamMember{
-		{
-			ID:        uuid.New(),
-			Name:      "Rina",
-			AvatarURL: "/avatars/rina.jpg",
-			Position:  "Developer",
-		},
-		{
-			ID:        uuid.New(),
-			Name:      "Budi",
-			AvatarURL: "/avatars/budi.jpg",
-			Position:  "Designer",
-		},
-		{
-			ID:        uuid.New(),
-			Name:      "Sari",
-			AvatarURL: "/avatars/sari.jpg",
-			Position:  "Manager",
-		},
-		{
-			ID:        uuid.New(),
-			Name:      "Andi",
-			AvatarURL: "/avatars/andi.jpg",
-			Position:  "Developer",
-		},
-	}
 }
 
 func getGreeting() string {
