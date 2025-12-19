@@ -57,7 +57,7 @@ func (s *AuthService) Login(tenantID uuid.UUID, email, password string) (string,
 	}
 
 	// Generate real JWT token
-	token, err := s.jwtUtil.GenerateToken(int(user.ID), user.Email, user.Role)
+	token, err := s.jwtUtil.GenerateToken(user.ID, user.Email, user.Role, user.TenantID)
 	if err != nil {
 		return "", nil, utils.ErrInternalServer
 	}
