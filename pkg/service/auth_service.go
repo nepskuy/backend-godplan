@@ -6,14 +6,23 @@ import (
 	"github.com/nepskuy/be-godplan/pkg/repository"
 	"github.com/nepskuy/be-godplan/pkg/utils"
 	"golang.org/x/crypto/bcrypt"
+	"os"
 )
 
 type AuthService struct {
 	userRepo *repository.UserRepository
+	jwtUtil  *utils.JWTUtil
 }
 
 func NewAuthService(userRepo *repository.UserRepository) *AuthService {
-	return &AuthService{userRepo: userRepo}
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		jwtSecret = "default-secret-key-change-in-production"
+	}
+	return &AuthService{
+		userRepo: userRepo,
+		jwtUtil:  utils.NewJWTUtil(jwtSecret),
+	}
 }
 
 func (s *AuthService) Register(user *models.User) error {
@@ -47,11 +56,11 @@ func (s *AuthService) Login(tenantID uuid.UUID, email, password string) (string,
 		return "", nil, utils.ErrInvalidCredentials
 	}
 
-	// Generate Token (assuming utils.GenerateToken exists and accepts UUIDs)
-	// Note: The original code had "mock-jwt-token", I'll keep it as placeholder or update if I know the JWT util
-	// But wait, the handler uses utils.NewJWTUtil. The service here seems to be a leftover or alternative implementation.
-	// I will just return the mock token as before but with correct signature.
-	token := "mock-jwt-token"
+	// Generate real JWT token
+	token, err := s.jwtUtil.GenerateToken(int(user.ID), user.Email, user.Role)
+	if err != nil {
+		return "", nil, utils.ErrInternalServer
+	}
 
 	user.Password = ""
 

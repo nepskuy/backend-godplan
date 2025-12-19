@@ -49,11 +49,11 @@ func Load() *Config {
 		DatabaseURL:   getEnv("DB_URL", getEnv("DATABASE_URL", getEnv("POSTGRES_URL", getEnv("POSTGRES_PRISMA_URL", getEnv("POSTGRES_URL_NON_POOLING", ""))))),
 		Env:           getEnv("ENV", "development"),
 
-		// 🔥 NEW: Office Location Config
-		// Kantor (Updated): -6.305890912517306, 106.67819550322469
-		OfficeLatitude:         getEnvFloat("OFFICE_LATITUDE", -6.305890912517306), // Default fallback
-		OfficeLongitude:        getEnvFloat("OFFICE_LONGITUDE", 106.67819550322469), // Default fallback
-		AttendanceRadiusMeters: getEnvFloat("ATTENDANCE_RADIUS_METERS", 100), // 100 meter default
+		// 🔥 FIXED: Office Location Config (Updated to actual office location)
+		// Kantor (CORRECT): -6.304563, 106.653286 (verified from user GPS at office)
+		OfficeLatitude:         getEnvFloat("OFFICE_LATITUDE", -6.304563),        // Fixed: was 106.678 (2.8km off!)
+		OfficeLongitude:        getEnvFloat("OFFICE_LONGITUDE", 106.653286),      // Fixed: now matches actual location
+		AttendanceRadiusMeters: getEnvFloat("ATTENDANCE_RADIUS_METERS", 100),     // 100 meter default
 		EnableLocationCheck:    getEnvBool("ENABLE_LOCATION_CHECK", true),
 	}
 
