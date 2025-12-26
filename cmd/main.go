@@ -131,6 +131,13 @@ func setupGin() {
 			protected.POST("/attendance/check-location", handlers.CheckLocation)
 			protected.GET("/attendance", handlers.GetAttendance)
 
+			// CRM routes - FIXED: Added missing routes
+			protected.GET("/crm/projects", handlers.GetCRMProjects)
+			protected.POST("/crm/projects", handlers.CreateCRMProject)
+			protected.GET("/crm/projects/:id", handlers.GetCRMProject)
+			protected.PUT("/crm/projects/:id", handlers.UpdateCRMProject)
+			protected.DELETE("/crm/projects/:id", handlers.DeleteCRMProject)
+
 			// Project routes
 			protected.GET("/projects", handlers.GetProjects)
 			protected.GET("/projects/:id", handlers.GetProject)
@@ -166,6 +173,13 @@ func setupGin() {
 	log.Printf("   - GET  /api/v1/tasks/statistics")
 	log.Printf("   - POST /api/v1/attendance/clock-in")
 	log.Printf("   - POST /api/v1/attendance/clock-out")
+	log.Printf("   - GET  /api/v1/crm/projects") // FIXED: Added CRM routes
+	log.Printf("   - POST /api/v1/crm/projects")
+	log.Printf("   - GET  /api/v1/crm/projects/:id")
+	log.Printf("   - PUT  /api/v1/crm/projects/:id")
+	log.Printf("   - DELETE /api/v1/crm/projects/:id")
+	log.Printf("   - GET  /api/v1/projects")
+	log.Printf("   - GET  /api/v1/projects/:id")
 }
 
 func ginHealthCheck(c *gin.Context) {
