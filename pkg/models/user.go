@@ -33,7 +33,7 @@ type User struct {
 // UserRegistrationRequest for register endpoint
 type UserRegistrationRequest struct {
 	Username string `json:"username" binding:"required"`
-	Email    string `json:"email" binding:"required"`
+	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required"`
 	FullName string `json:"full_name" binding:"required"` // Changed from Name to FullName
 	Phone    string `json:"phone,omitempty"`
@@ -42,7 +42,7 @@ type UserRegistrationRequest struct {
 
 // LoginRequest for login endpoint
 type LoginRequest struct {
-	Email    string `json:"email" binding:"required"`
+	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required"`
 }
 

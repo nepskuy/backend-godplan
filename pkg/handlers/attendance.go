@@ -454,7 +454,7 @@ func GetAttendance(c *gin.Context) {
 		rows, err = database.DB.Query(
 			`SELECT id, user_id, type, status, attendance_date, 
 				COALESCE(TO_CHAR(check_in_time, 'HH24:MI'), TO_CHAR(created_at, 'HH24:MI')) as time,
-				latitude, longitude, photo_selfie, in_range, force_attendance, created_at 
+				check_in_lat as latitude, check_in_lng as longitude, check_in_photo as photo_selfie, in_range, force_attendance, created_at 
 			FROM godplan.attendances 
 			WHERE user_id = $1 AND tenant_id = $2 AND attendance_date = $3 
 			ORDER BY created_at DESC LIMIT $4`,
@@ -464,7 +464,7 @@ func GetAttendance(c *gin.Context) {
 		rows, err = database.DB.Query(
 			`SELECT id, user_id, type, status, attendance_date, 
 				COALESCE(TO_CHAR(check_in_time, 'HH24:MI'), TO_CHAR(created_at, 'HH24:MI')) as time,
-				latitude, longitude, photo_selfie, in_range, force_attendance, created_at 
+				check_in_lat as latitude, check_in_lng as longitude, check_in_photo as photo_selfie, in_range, force_attendance, created_at 
 			FROM godplan.attendances 
 			WHERE user_id = $1 AND tenant_id = $2 
 			ORDER BY created_at DESC LIMIT $3`,
