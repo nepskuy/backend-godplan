@@ -7,13 +7,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// GinCORS middleware untuk Gin
 func GinCORS() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origin := c.Request.Header.Get("Origin")
 		env := os.Getenv("ENVIRONMENT")
 
-		// Allow specific origins regardless of environment
 		allowedOrigins := []string{
 			"https://godplan.godjahstudio.com",
 			"https://be-godplan.godjahstudio.com",
