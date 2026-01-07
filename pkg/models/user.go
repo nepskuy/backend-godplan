@@ -32,18 +32,18 @@ type User struct {
 
 // UserRegistrationRequest for register endpoint
 type UserRegistrationRequest struct {
-	Username string `json:"username" binding:"required"`
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required"`
-	FullName string `json:"full_name" binding:"required"` // Changed from Name to FullName
-	Phone    string `json:"phone,omitempty"`
-	Role     string `json:"role,omitempty"`
+	Username string `json:"username" binding:"required,min=3,max=50,alphanum"`
+	Email    string `json:"email" binding:"required,email,max=255"`
+	Password string `json:"password" binding:"required,min=8,max=100"`
+	FullName string `json:"full_name" binding:"required,max=100"` // Changed from Name to FullName
+	Phone    string `json:"phone,omitempty" binding:"max=20"`
+	Role     string `json:"role,omitempty" binding:"max=20"`
 }
 
 // LoginRequest for login endpoint
 type LoginRequest struct {
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required"`
+	Email    string `json:"email" binding:"required,email,max=255"`
+	Password string `json:"password" binding:"required,max=100"`
 }
 
 // Employee represents employee data structure
