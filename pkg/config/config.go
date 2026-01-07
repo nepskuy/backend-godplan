@@ -49,11 +49,12 @@ func Load() *Config {
 		DatabaseURL:   getEnv("DB_URL", getEnv("DATABASE_URL", getEnv("POSTGRES_URL", getEnv("POSTGRES_PRISMA_URL", getEnv("POSTGRES_URL_NON_POOLING", ""))))),
 		Env:           getEnv("ENV", "development"),
 
-		// 🔥 FIXED: Office Location Config (Updated to actual office location)
-		// Kantor (CORRECT): -6.304563, 106.653286 (verified from user GPS at office)
-		OfficeLatitude:         getEnvFloat("OFFICE_LATITUDE", -6.304563),        // Fixed: was 106.678 (2.8km off!)
-		OfficeLongitude:        getEnvFloat("OFFICE_LONGITUDE", 106.653286),      // Fixed: now matches actual location
-		AttendanceRadiusMeters: getEnvFloat("ATTENDANCE_RADIUS_METERS", 100),     // 100 meter default
+		// 🔥 PRODUCTION-READY: Office Location Config
+		// GodJah Studio - BSD City, Tangerang Selatan
+		// Note: Set exact coordinates via OFFICE_LATITUDE and OFFICE_LONGITUDE env vars
+		OfficeLatitude:         getEnvFloat("OFFICE_LATITUDE", -6.305881),        // GodJah Studio BSD (update via env if needed)
+		OfficeLongitude:        getEnvFloat("OFFICE_LONGITUDE", 106.678055),      // GodJah Studio BSD (update via env if needed)
+		AttendanceRadiusMeters: getEnvFloat("ATTENDANCE_RADIUS_METERS", 5000),    // 5km radius for production flexibility
 		EnableLocationCheck:    getEnvBool("ENABLE_LOCATION_CHECK", true),
 	}
 

@@ -17,9 +17,10 @@ import (
 
 type ClockInRequest struct {
 	Latitude    float64 `json:"latitude" example:"-6.2088"`
-	Longitude   float64 `json:"longitude" example:"106.8456"`
+	Longitude   float64 ` json:"longitude" example:"106.8456"`
 	PhotoSelfie string  `json:"photo_selfie" example:"base64_encoded_image"`
 	Force       bool    `json:"force" example:"false"`
+	Accuracy    float64 `json:"accuracy" example:"15.5"` // GPS accuracy in meters
 }
 
 type ClockOutRequest struct {
@@ -27,11 +28,13 @@ type ClockOutRequest struct {
 	Longitude   float64 `json:"longitude" example:"106.8456"`
 	PhotoSelfie string  `json:"photo_selfie" example:"base64_encoded_image"`
 	Force       bool    `json:"force" example:"false"`
+	Accuracy    float64 `json:"accuracy" example:"15.5"` // GPS accuracy in meters
 }
 
 type LocationCheckRequest struct {
 	Latitude  float64 `json:"latitude" example:"-6.2088"`
 	Longitude float64 `json:"longitude" example:"106.8456"`
+	Accuracy  float64 `json:"accuracy" example:"15.5"` // GPS accuracy in meters
 }
 
 type AttendanceResponse struct {
@@ -86,15 +89,21 @@ func CheckLocation(c *gin.Context) {
 		return
 	}
 
-	// 🔥 NEW: Gunakan location validation dari utils
-	validation := utils.ValidateLocation(req.Latitude, req.Longitude)
+	// 🚀 NEW: Gunakan adaptive location validation dengan GPS accuracy
+	validation := utils.ValidateLocationAdaptive(req.Latitude, req.Longitude, req.Accuracy)
 
-	// Gunakan response langsung dari utils.ValidationResult
+	// Enhanced response dengan informasi GPS quality
 	response := map[string]interface{}{
-		"in_range":   validation.InRange,
-		"message":    validation.Message,
-		"need_force": validation.NeedForce,
-		"distance":   validation.Distance,
+		"in_range":         validation.InRange,
+		"message":          validation.Message,
+		"detailed_message": validation.DetailedMessage,
+		"need_force":       validation.NeedForce,
+		"distance":         validation.Distance,
+		"max_radius":       validation.MaxRadius,
+		"adaptive_radius":  validation.AdaptiveRadius,
+		"gps_accuracy":     validation.GPSAccuracy,
+		"gps_quality":      validation.GPSQuality,
+		"recommendation":   validation.Recommendation,
 	}
 
 	utils.GinSuccessResponse(c, http.StatusOK, "Location validation successful", response)
@@ -164,14 +173,14 @@ func ClockIn(c *gin.Context) {
 		return
 	}
 
-	// Validate location
-	inRange, distance := utils.IsWithinOfficeRange(req.Latitude, req.Longitude)
+	// Validate location with adaptive threshold based on GPS accuracy
+	inRange, distance, adaptiveRadius := utils.IsWithinOfficeRangeAdaptive(req.Latitude, req.Longitude, req.Accuracy)
 	cfg := config.Load()
 
 	if !inRange && !req.Force {
 		utils.GinErrorResponse(c, http.StatusBadRequest,
-			fmt.Sprintf("Lokasi di luar jangkauan kantor (%.0f meter dari radius %.0f meter). Gunakan force=true untuk tetap melanjutkan.",
-				distance, cfg.AttendanceRadiusMeters))
+			fmt.Sprintf("Lokasi di luar jangkauan kantor. Jarak: %.0fm | Jangkauan adaptive: %.0fm (GPS accuracy: %.0fm). Gunakan force=true jika Anda yakin sudah di kantor.",
+				distance, adaptiveRadius, req.Accuracy))
 		return
 	}
 
@@ -295,14 +304,14 @@ func ClockOut(c *gin.Context) {
 		return
 	}
 
-	// Validate location
-	inRange, distance := utils.IsWithinOfficeRange(req.Latitude, req.Longitude)
+	// Validate location with adaptive threshold based on GPS accuracy
+	inRange, distance, adaptiveRadius := utils.IsWithinOfficeRangeAdaptive(req.Latitude, req.Longitude, req.Accuracy)
 	cfg := config.Load()
 
 	if !inRange && !req.Force {
 		utils.GinErrorResponse(c, http.StatusBadRequest,
-			fmt.Sprintf("Lokasi di luar jangkauan kantor (%.0f meter dari radius %.0f meter). Gunakan force=true untuk tetap melanjutkan.",
-				distance, cfg.AttendanceRadiusMeters))
+			fmt.Sprintf("Lokasi di luar jangkauan kantor. Jarak: %.0fm | Jangkauan adaptive: %.0fm (GPS accuracy: %.0fm). Gunakan force=true jika Anda yakin sudah di kantor.",
+				distance, adaptiveRadius, req.Accuracy))
 		return
 	}
 
