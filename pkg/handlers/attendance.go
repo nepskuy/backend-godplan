@@ -315,17 +315,18 @@ func ClockOut(c *gin.Context) {
 		return
 	}
 
-	// Find existing clock-in record for today
+	// Find existing clock-in record (latest active session, even from previous days)
 	var attendanceID uuid.UUID
 	var checkInTime time.Time
 	findErr := database.DB.QueryRow(
 		`SELECT id, check_in_time FROM godplan.attendances 
-		 WHERE user_id = $1 AND tenant_id = $2 AND attendance_date = CURRENT_DATE AND check_out_time IS NULL`,
+		 WHERE user_id = $1 AND tenant_id = $2 AND check_out_time IS NULL
+		 ORDER BY created_at DESC LIMIT 1`,
 		userID, tenantID,
 	).Scan(&attendanceID, &checkInTime)
 
 	if findErr != nil {
-		utils.GinErrorResponse(c, http.StatusBadRequest, "Belum melakukan Clock In hari ini atau sudah Clock Out")
+		utils.GinErrorResponse(c, http.StatusBadRequest, "Tidak ada sesi Clock In yang aktif (atau sudah Clock Out)")
 		return
 	}
 
